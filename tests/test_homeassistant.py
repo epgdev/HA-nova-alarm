@@ -308,3 +308,42 @@ async def test_real_entry_setup_states_options_and_unload(hass):
             await hass.async_block_till_done()
         assert await hass.config_entries.async_unload(entry.entry_id)
         client.async_close.assert_awaited_once()
+
+
+@pytest.mark.parametrize(
+    "error,key",
+    [
+        (
+            CannotConnect("secret", reason="TOO-MANY-USERS", operation="/avs/auth_ex"),
+            "too_many_users",
+        ),
+        (CannotConnect("secret", reason="timeout"), "timeout"),
+        (CannotConnect("secret", reason="http_429"), "rate_limited"),
+        (CannotConnect("secret", reason="tls_error"), "tls_error"),
+        (CannotConnect("secret", reason="COMMUNICATION-ERROR"), "panel_unreachable"),
+        (CannotConnect("secret", reason="session_rejected_after_renewal"), "session_error"),
+    ],
+)
+def test_setup_reports_specific_safe_diagnostics(error, key, caplog):
+    from custom_components.nova_alarm.config_flow import error_key
+
+    assert error_key(error) == key
+    assert error.reason in caplog.text
+    assert "secret" not in caplog.text
+
+
+async def test_command_log_never_includes_error_message(hass, caplog):
+    client = AsyncMock()
+    client.async_set_sector_mode.side_effect = CannotConnect(
+        "secret-password", reason="timeout", operation="/avs/set_sectors"
+    )
+    client.async_snapshot.return_value = snapshot()
+    coordinator = AvsCoordinator(hass, make_entry(), client)
+    coordinator.async_set_updated_data(snapshot())
+    with pytest.raises(HomeAssistantError):
+        await AvsAlarm(coordinator, "1").async_alarm_arm_away("01234")
+    assert "reason=timeout" in caplog.text
+    assert "operation=/avs/set_sectors" in caplog.text
+    assert "secret-password" not in caplog.text
+    assert "01234" not in caplog.text
+    client.async_set_sector_mode.assert_awaited_once()

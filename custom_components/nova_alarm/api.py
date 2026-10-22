@@ -33,6 +33,11 @@ ALLOWED_ENDPOINTS = frozenset(
 class AvsError(Exception):
     """A sanitized error; never include server response bodies or credentials."""
 
+    def __init__(self, message: str = "", *, reason: str = "unknown", operation: str = "unknown"):
+        super().__init__(message)
+        self.reason = reason
+        self.operation = operation
+
 
 class CannotConnect(AvsError):
     """Transient network, server or equipment communication failure."""
@@ -96,10 +101,12 @@ def elements(root: ET.Element, name: str) -> list[ET.Element]:
     return [item for item in root.iter() if item.tag.rsplit("}", 1)[-1] == name]
 
 
-def required_element(root: ET.Element, name: str) -> ET.Element:
+def required_element(root: ET.Element, name: str, *, operation: str = "unknown") -> ET.Element:
     matches = elements(root, name)
     if len(matches) != 1:
-        raise ProtocolError("Unexpected XML structure")
+        raise ProtocolError(
+            "Unexpected XML structure", reason="unexpected_xml_structure", operation=operation
+        )
     return matches[0]
 
 
@@ -120,7 +127,7 @@ def parse_xml(data: bytes, *, authenticating: bool = False) -> ET.Element:
     try:
         root = ET.fromstring(data)
     except ET.ParseError:
-        raise ProtocolError("Invalid XML response") from None
+        raise ProtocolError("Invalid XML response", reason="invalid_xml") from None
     errors = elements(root, "ERROR")
     if not errors:
         return root
@@ -133,9 +140,11 @@ def parse_xml(data: bytes, *, authenticating: bool = False) -> ET.Element:
         "DISCLAIMER_REQUIRED",
         "DISCLAIMER-REQUIRED",
     }:
-        raise AccountError(cause)
+        raise AccountError(cause, reason=cause)
     if cause in {"HTTP_UNAUTHORIZED", "SESSION_EXPIRED"} and not authenticating:
-        raise SessionExpired("Cloud session expired")
+        raise SessionExpired("Cloud session expired", reason=cause)
+    if cause == "BAD-ARGUMENT":
+        raise ProtocolError("AVS rejected request parameters", reason="BAD-ARGUMENT")
     if cause in {
         "COMMUNICATION-ERROR",
         "EQUIPMENT-NOT-FOUND",
@@ -145,10 +154,13 @@ def parse_xml(data: bytes, *, authenticating: bool = False) -> ET.Element:
         "TOO-MANY-USERS",
         "TIMEOUT",
     }:
-        raise CannotConnect("AVS service or equipment unavailable")
+        raise CannotConnect("AVS service or equipment unavailable", reason=cause)
     if authenticating:
-        raise InvalidAuth("AVS refused authentication; check account and PIN in the app")
-    raise ProtocolError("AVS returned an unrecognized error")
+        raise InvalidAuth(
+            "AVS refused authentication; check account and PIN in the app",
+            reason="authentication_refused",
+        )
+    raise ProtocolError("AVS returned an unrecognized error", reason="unrecognized_server_error")
 
 
 def encode_form(params: dict[str, str]) -> bytes:
@@ -160,7 +172,9 @@ def encode_form(params: dict[str, str]) -> bytes:
 def parse_snapshot(sector_xml: ET.Element, zone_xml: ET.Element) -> Snapshot:
     sectors: dict[str, Sector] = {}
     zones: dict[str, Zone] = {}
-    for item in elements(required_element(sector_xml, "GET_SECTORS"), "ITEM"):
+    for item in elements(
+        required_element(sector_xml, "GET_SECTORS", operation="/avs/get_sectors"), "ITEM"
+    ):
         item_id = item.get("id", "")
         if not item_id or item_id in sectors:
             raise ProtocolError("Invalid or duplicate sector identifier")
@@ -173,7 +187,9 @@ def parse_snapshot(sector_xml: ET.Element, zone_xml: ET.Element) -> Snapshot:
                 if item.get(field) == "1"
             ),
         )
-    for item in elements(required_element(zone_xml, "GET_ZONES"), "ITEM"):
+    for item in elements(
+        required_element(zone_xml, "GET_ZONES", operation="/avs/get_zones"), "ITEM"
+    ):
         item_id = item.get("id", "")
         if not item_id or item_id in zones:
             raise ProtocolError("Invalid or duplicate zone identifier")
@@ -220,6 +236,23 @@ class AvsClient:
         server: str | None = None,
         authenticating: bool = False,
     ) -> ET.Element:
+        try:
+            return await self._post_request(
+                endpoint, params, server=server, authenticating=authenticating
+            )
+        except AvsError as error:
+            # Record only the allowlisted endpoint, never URLs, bodies or form fields.
+            error.operation = endpoint if endpoint in ALLOWED_ENDPOINTS else "unsupported_endpoint"
+            raise
+
+    async def _post_request(
+        self,
+        endpoint: str,
+        params: dict[str, str],
+        *,
+        server: str | None = None,
+        authenticating: bool = False,
+    ) -> ET.Element:
         if endpoint not in ALLOWED_ENDPOINTS:
             raise ProtocolError("Endpoint is not supported by this client")
         try:
@@ -232,12 +265,14 @@ class AvsClient:
             ) as response:
                 if response.status in (401, 403):
                     if authenticating:
-                        raise InvalidAuth("Account or PIN refused")
-                    raise SessionExpired("Cloud session expired")
+                        raise InvalidAuth(
+                            "Account or PIN refused", reason=f"http_{response.status}"
+                        )
+                    raise SessionExpired("Cloud session expired", reason=f"http_{response.status}")
                 if response.status == 429:
-                    raise CannotConnect("AVS request rate exceeded")
+                    raise CannotConnect("AVS request rate exceeded", reason="http_429")
                 if response.status not in (200, 412):
-                    raise CannotConnect("AVS HTTP request failed")
+                    raise CannotConnect("AVS HTTP request failed", reason=f"http_{response.status}")
                 chunks = bytearray()
                 async for chunk in response.content.iter_chunked(65536):
                     chunks.extend(chunk)
@@ -247,8 +282,14 @@ class AvsClient:
                 if response.status != 200:
                     raise ProtocolError("Unexpected AVS HTTP response")
                 return root
-        except aiohttp.ClientError, TimeoutError:
-            raise CannotConnect("Connection to AVS failed") from None
+        except TimeoutError:
+            raise CannotConnect("Connection to AVS timed out", reason="timeout") from None
+        except aiohttp.ClientSSLError:
+            raise CannotConnect("TLS connection to AVS failed", reason="tls_error") from None
+        except aiohttp.ClientConnectorError:
+            raise CannotConnect("Connection to AVS failed", reason="connection_error") from None
+        except aiohttp.ClientError:
+            raise CannotConnect("Connection to AVS failed", reason="transport_error") from None
 
     async def _discover(self) -> None:
         if self._discovered:
@@ -307,10 +348,14 @@ class AvsClient:
             },
             authenticating=True,
         )
-        auth = required_element(root, "AUTH_EX").get("auth", "")
-        token = required_element(root, "LOGIN").get("session", "")
+        auth = required_element(root, "AUTH_EX", operation="/avs/auth_ex").get("auth", "")
+        token = required_element(root, "LOGIN", operation="/avs/auth_ex").get("session", "")
         if not auth or not token:
-            raise ProtocolError("Missing session credentials")
+            raise ProtocolError(
+                "Missing session credentials",
+                reason="missing_session_credentials",
+                operation="/avs/auth_ex",
+            )
         self._auth, self._token = auth, token
 
     async def _read(self, endpoint: str, extra: dict[str, str] | None = None) -> ET.Element:
@@ -371,7 +416,9 @@ class AvsClient:
                 return await self._snapshot()
             except SessionExpired:
                 self._auth = self._token = ""
-                raise CannotConnect("Session was rejected after renewal") from None
+                raise CannotConnect(
+                    "Session was rejected after renewal", reason="session_rejected_after_renewal"
+                ) from None
 
     async def async_set_sector_mode(self, sector_id: str, mode: int) -> None:
         """Send one checked command, never automatically replay a write."""
@@ -392,9 +439,11 @@ class AvsClient:
             except SessionExpired:
                 self._auth = self._token = ""
                 raise CannotConnect(
-                    "Command session expired; refresh before trying again"
+                    "Command session expired; refresh before trying again",
+                    reason="command_session_expired",
+                    operation="/avs/set_sectors",
                 ) from None
-            result = required_element(root, "SET_SECTORS")
+            result = required_element(root, "SET_SECTORS", operation="/avs/set_sectors")
             if result.get("status") != "0":
                 # Never expose errstr, bypass checks or retry with checkzone=0.
                 raise CommandRejected("Panel refused the command; check zones in the official app")
@@ -419,9 +468,11 @@ class AvsClient:
             except SessionExpired:
                 self._auth = self._token = ""
                 raise CannotConnect(
-                    "Command session expired; refresh before trying again"
+                    "Command session expired; refresh before trying again",
+                    reason="command_session_expired",
+                    operation="/avs/set_zones",
                 ) from None
-            if required_element(root, "SET_ZONES").get("status") != "0":
+            if required_element(root, "SET_ZONES", operation="/avs/set_zones").get("status") != "0":
                 raise CommandRejected("Panel refused the zone command")
 
     async def async_close(self) -> None:

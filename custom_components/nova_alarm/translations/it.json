@@ -38,7 +38,14 @@
       "invalid_device_id": "Inserisci 16 caratteri esadecimali minuscoli.",
       "cannot_connect": "Impossibile leggere l’impianto. Verifica la connessione e riprova più tardi.",
       "account_error": "L’account AVS richiede attenzione: controlla abbonamento, limite dispositivi o consensi nell’app ufficiale.",
-      "unknown": "Errore inatteso."
+      "unknown": "Errore inatteso.",
+      "protocol_error": "Il cloud AVS ha restituito una risposta non prevista. Consulta i registri Nova Alarm per il codice diagnostico.",
+      "too_many_users": "Il servizio AVS segnala troppe sessioni contemporanee. Chiudi eventuali altre sessioni e riprova più tardi.",
+      "rate_limited": "Il cloud AVS sta limitando le richieste. Attendi prima di riprovare.",
+      "timeout": "Il cloud AVS non ha risposto entro il tempo previsto. Consulta i registri Nova Alarm.",
+      "tls_error": "La connessione HTTPS ad AVS non è verificabile. Controlla data, ora e connessione di Home Assistant; non disabilitare la verifica dei certificati.",
+      "panel_unreachable": "Il cloud AVS segnala che la centrale non è raggiungibile o non è stata trovata. Consulta i registri Nova Alarm.",
+      "session_error": "La sessione AVS è stata rifiutata anche dopo il rinnovo. Consulta i registri Nova Alarm."
     },
     "abort": {
       "already_configured": "Questo impianto è già configurato.",
@@ -130,7 +137,7 @@
       "message": "La centrale ha rifiutato il comando o l’operazione non è consentita. Controlla zone, anomalie e permessi nell’app ufficiale."
     },
     "command_failed": {
-      "message": "Invio del comando non confermato. Controlla lo stato nell’app ufficiale prima di riprovare. Il comando non è stato ritentato automaticamente."
+      "message": "Invio del comando non confermato. Controlla lo stato nell’app ufficiale prima di riprovare. Il comando non è stato ritentato automaticamente. Consulta i registri Nova Alarm per la causa diagnostica."
     },
     "command_unconfirmed": {
       "message": "Comando accettato, ma lo stato richiesto non è ancora confermato dalla centrale. Attendi l’aggiornamento e controlla nell’app ufficiale prima di riprovare."

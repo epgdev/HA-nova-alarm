@@ -52,6 +52,12 @@ class AvsCoordinator(DataUpdateCoordinator[Snapshot]):
         try:
             await command
         except AvsError as error:
+            LOGGER.warning(
+                "AVS command failed: operation=%s category=%s reason=%s; write not retried",
+                error.operation,
+                type(error).__name__,
+                error.reason,
+            )
             # A failed response may follow an applied command. Reconcile with a read,
             # without replaying the write or publishing an optimistic alarm state.
             await self.async_refresh()
@@ -72,4 +78,10 @@ class AvsCoordinator(DataUpdateCoordinator[Snapshot]):
         except AccountError as error:
             raise ConfigEntryError(str(error)) from error
         except CannotConnect as error:
+            LOGGER.warning(
+                "AVS read failed: operation=%s category=%s reason=%s",
+                error.operation,
+                type(error).__name__,
+                error.reason,
+            )
             raise UpdateFailed(str(error)) from error

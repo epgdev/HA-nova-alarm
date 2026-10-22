@@ -381,3 +381,57 @@ async def test_zone_failure_is_never_retried(result, error):
     with pytest.raises(error):
         await client.async_set_zone_excluded("6", True)
     client._post.assert_awaited_once()
+
+
+@pytest.mark.parametrize(
+    "body,reason",
+    [
+        (b'<AVS><ERROR cause="TOO-MANY-USERS" what="secret"/></AVS>', "TOO-MANY-USERS"),
+        (b'<AVS><ERROR cause="COMMUNICATION-ERROR" what="secret"/></AVS>', "COMMUNICATION-ERROR"),
+        (b'<AVS><ERROR cause="SECRET-PASSWORD" what="secret"/></AVS>', "unrecognized_server_error"),
+        (b"not xml with secret", "invalid_xml"),
+    ],
+)
+def test_diagnostic_reasons_never_include_remote_details(body, reason):
+    from custom_components.nova_alarm.api import AvsError
+
+    with pytest.raises(AvsError) as caught:
+        parse_xml(body)
+    assert caught.value.reason == reason
+    assert "secret" not in str(caught.value).lower()
+    assert "secret" not in caught.value.reason.lower()
+
+
+@pytest.mark.parametrize(
+    "failure,reason",
+    [
+        (TimeoutError("secret"), "timeout"),
+        (CannotConnect("secret", reason="connection_error"), "connection_error"),
+    ],
+)
+async def test_request_records_only_safe_operation(failure, reason):
+    client = make_client()
+    if isinstance(failure, TimeoutError):
+        client._session.post.side_effect = failure
+    else:
+        client._post_request = AsyncMock(side_effect=failure)
+    with pytest.raises(CannotConnect) as caught:
+        await client._post("/avs/auth_ex", {"password": "secret"})
+    assert caught.value.operation == "/avs/auth_ex"
+    assert caught.value.reason == reason
+
+
+@pytest.mark.parametrize("status", [401, 403, 429, 500, 503])
+async def test_http_diagnostic_status(status):
+    client = make_client()
+    response = MagicMock()
+    response.status = status
+    context = MagicMock()
+    context.__aenter__ = AsyncMock(return_value=response)
+    client._session.post.return_value = context
+    from custom_components.nova_alarm.api import AvsError
+
+    with pytest.raises(AvsError) as caught:
+        await client._post("/avs/auth_ex", {"password": "secret"}, authenticating=True)
+    assert caught.value.reason == f"http_{status}"
+    assert caught.value.operation == "/avs/auth_ex"

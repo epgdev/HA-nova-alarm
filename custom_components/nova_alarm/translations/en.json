@@ -38,7 +38,14 @@
       "invalid_device_id": "Enter 16 lowercase hexadecimal characters.",
       "cannot_connect": "Cannot read the installation. Check connectivity and try again later.",
       "account_error": "AVS account needs attention: check subscription, device limit or consent in the official app.",
-      "unknown": "Unexpected error."
+      "unknown": "Unexpected error.",
+      "protocol_error": "The AVS cloud returned an unexpected response. Check the Nova Alarm logs for the diagnostic code.",
+      "too_many_users": "AVS reports too many concurrent sessions. Close other sessions if present and try again later.",
+      "rate_limited": "The AVS cloud is limiting requests. Wait before retrying.",
+      "timeout": "The AVS cloud did not respond in time. Check the Nova Alarm logs.",
+      "tls_error": "The HTTPS connection to AVS could not be verified. Check Home Assistant date, time and connectivity; do not disable certificate verification.",
+      "panel_unreachable": "The AVS cloud reports that the panel is unreachable or was not found. Check the Nova Alarm logs.",
+      "session_error": "AVS rejected the session even after renewal. Check the Nova Alarm logs."
     },
     "abort": {
       "already_configured": "This installation is already configured.",
@@ -130,7 +137,7 @@
       "message": "The panel refused the command or the operation is not permitted. Check zones, faults and permissions in the official app."
     },
     "command_failed": {
-      "message": "Command delivery is unconfirmed. Check the state in the official app before retrying. The command was not automatically retried."
+      "message": "Command delivery is unconfirmed. Check the state in the official app before retrying. The command was not automatically retried. Check the Nova Alarm logs for the diagnostic cause."
     },
     "command_unconfirmed": {
       "message": "Command accepted, but the requested state is not yet confirmed by the panel. Wait for an update and check the official app before retrying."

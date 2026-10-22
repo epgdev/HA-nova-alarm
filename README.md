@@ -1,4 +1,4 @@
-# Nova Alarm per Home Assistant — 0.3.0
+# Nova Alarm per Home Assistant — 0.3.1
 
 Prima versione sperimentale di una **custom integration** per il cloud AVS.
 Si configura da Impostazioni → Dispositivi e servizi. Non è un add-on da
@@ -271,3 +271,21 @@ Il controllo del brand è escluso per questa prima versione come repository
 personalizzato: non è una dichiarazione di ammissione al catalogo HACS.
 Il README e le issue del repository costituiscono la documentazione e il
 canale per le segnalazioni. Licenza MIT.
+
+## Diagnostica di accesso e comandi (0.3.1)
+
+Se l’app ufficiale legge lo stato ma Home Assistant non riesce a configurare
+l’integrazione, non è ancora possibile attribuire il problema alla centrale,
+alla rete o alla sessione. Dalla 0.3.1 i moduli `nova_alarm.config_flow` e
+`nova_alarm.coordinator` registrano il tipo di errore, l’endpoint AVS e un codice
+controllato, per esempio `TOO-MANY-USERS`, `COMMUNICATION-ERROR`, `timeout`,
+`http_429` o `invalid_xml`. I messaggi della configurazione distinguono queste
+cause. Non vengono registrati parametri, PIN, credenziali, token o XML remoto.
+
+Dopo l’aggiornamento e il riavvio, riprova soltanto l’accesso o la lettura e apri
+**Impostazioni → Sistema → Registri**, cercando `AVS setup failed` oppure
+`AVS read failed`. Per problemi ai comandi cerca `AVS command failed`.
+Non ripetere un comando dall’esito incerto prima di aver verificato lo stato
+nell’app ufficiale. Non occorre eliminare e ricreare l’integrazione per ottenere
+questi dettagli; eventuali nuove configurazioni possono registrare un nuovo
+dispositivo sull’account AVS.

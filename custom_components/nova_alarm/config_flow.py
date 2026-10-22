@@ -1,5 +1,6 @@
 """UI setup, installation selection, reauthentication and options."""
 
+import logging
 import re
 import secrets
 
@@ -20,7 +21,7 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
-from .api import AccountError, AvsClient, AvsError, CannotConnect, InvalidAuth, Plant
+from .api import AccountError, AvsClient, AvsError, CannotConnect, InvalidAuth, Plant, ProtocolError
 from .const import (
     CONF_DEVICE_ID,
     CONF_ENABLED_MODES,
@@ -37,6 +38,7 @@ from .const import (
 )
 
 SECRET = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
+LOGGER = logging.getLogger(__name__)
 
 
 def credentials_schema(*, username: str = "", pin: bool = False) -> vol.Schema:
@@ -52,10 +54,29 @@ def credentials_schema(*, username: str = "", pin: bool = False) -> vol.Schema:
 
 
 def error_key(error: AvsError) -> str:
+    LOGGER.warning(
+        "AVS setup failed: operation=%s category=%s reason=%s",
+        error.operation,
+        type(error).__name__,
+        error.reason,
+    )
     if isinstance(error, InvalidAuth):
         return "invalid_auth"
     if isinstance(error, AccountError):
         return "account_error"
+    if isinstance(error, ProtocolError):
+        return "protocol_error"
+    specific = {
+        "TOO-MANY-USERS": "too_many_users",
+        "http_429": "rate_limited",
+        "timeout": "timeout",
+        "tls_error": "tls_error",
+        "COMMUNICATION-ERROR": "panel_unreachable",
+        "EQUIPMENT-NOT-FOUND": "panel_unreachable",
+        "session_rejected_after_renewal": "session_error",
+    }
+    if error.reason in specific:
+        return specific[error.reason]
     if isinstance(error, CannotConnect):
         return "cannot_connect"
     return "unknown"
