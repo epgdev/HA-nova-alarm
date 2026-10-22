@@ -1,4 +1,4 @@
-# Nova Alarm per Home Assistant — 0.3.1
+# Nova Alarm per Home Assistant — 0.3.2
 
 Prima versione sperimentale di una **custom integration** per il cloud AVS.
 Si configura da Impostazioni → Dispositivi e servizi. Non è un add-on da
@@ -289,3 +289,13 @@ Non ripetere un comando dall’esito incerto prima di aver verificato lo stato
 nell’app ufficiale. Non occorre eliminare e ricreare l’integrazione per ottenere
 questi dettagli; eventuali nuove configurazioni possono registrare un nuovo
 dispositivo sull’account AVS.
+
+### Correzione comandi nella 0.3.2
+
+La richiesta dei comandi ora mantiene la virgola letterale nelle coppie
+settore/modalità e zona/esclusione, come l’app ufficiale. Prima veniva inviata
+come `%2C`: questa differenza è stata individuata dopo una risposta
+`BAD-ARGUMENT` sul campo. I test confrontano i byte effettivi del corpo HTTP;
+la conferma del funzionamento sull’impianto rimane da effettuare.
+Aggiorna da HACS e riavvia Home Assistant. Non vengono inviati comandi durante
+l’aggiornamento e non vengono introdotti reinvii automatici o forzature.

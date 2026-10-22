@@ -175,6 +175,9 @@ async def test_sector_command_wire_format(mode):
     await client.async_set_sector_mode("1", mode)
     call = client._session.post.call_args
     assert call.args == ("https://fe1.myavsalarm.com:443/avs/set_sectors",)
+    assert call.kwargs["data"] == (
+        f"auth=auth&session=session&sectors=1,{mode}&check=1&checkzone=1".encode()
+    )
     assert parse_qs(call.kwargs["data"].decode()) == {
         "auth": ["auth"],
         "session": ["session"],
@@ -306,6 +309,7 @@ async def test_zone_command_wire_format(excluded, flags):
     await client.async_set_zone_excluded("6", excluded)
     call = client._session.post.call_args
     assert call.args == ("https://fe1.myavsalarm.com:443/avs/set_zones",)
+    assert call.kwargs["data"] == f"auth=auth&session=session&zones=6,{int(excluded)}".encode()
     assert parse_qs(call.kwargs["data"].decode()) == {
         "auth": ["auth"],
         "session": ["session"],
@@ -435,3 +439,35 @@ async def test_http_diagnostic_status(status):
         await client._post("/avs/auth_ex", {"password": "secret"}, authenticating=True)
     assert caught.value.reason == f"http_{status}"
     assert caught.value.operation == "/avs/auth_ex"
+
+
+def test_literal_command_delimiter_does_not_change_credential_encoding():
+    body = encode_form(
+        {
+            "username": "user,name",
+            "password": "p,a+ss&=%",
+            "auth": "a,b+&",
+            "session": "s,e+&",
+            "sectors": "1,0",
+            "zones": "6,1",
+        }
+    )
+    assert body == (
+        b"username=user%2Cname&password=p%2Ca%2Bss%26%3D%25&auth=a%2Cb%2B%26"
+        b"&session=s%2Ce%2B%26&sectors=1,0&zones=6,1"
+    )
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("sectors", "1,0&check=0"),
+        ("zones", "6,1&other=1"),
+        ("sectors", "1,0,2,4"),
+        ("other", "1,0"),
+    ],
+)
+def test_only_single_valid_command_pair_retains_literal_comma(field, value):
+    body = encode_form({field: value})
+    assert b"," not in body
+    assert parse_qs(body.decode()) == {field: [value]}

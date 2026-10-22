@@ -1,4 +1,4 @@
-# Note di protocollo — versione 0.3.0
+# Note di protocollo — versione 0.3.2
 
 Ricostruzione statica dall'APK Mio Antifurto fornito dall'utente, con prima
 verifica effettiva dell'accesso e delle letture tramite lo script Python.
@@ -7,8 +7,13 @@ Non sono inclusi APK, Java decompilato, credenziali o token nel progetto.
 ## Trasporto
 
 HTTPS, metodo POST, `Content-Type: application/x-www-form-urlencoded`.
-I valori sono sottoposti una sola volta a trim e codifica UTF-8 in stile
-`URLEncoder` Android; gli spazi diventano `%20`. Le risposte sono XML.
+Le credenziali sono sottoposte una sola volta a trim e codifica UTF-8 in stile
+`URLEncoder` Android; gli spazi diventano `%20`. `Utils.getPostDataString`
+unisce invece i valori già preparati, senza applicare ulteriore URL encoding.
+`SetSectorsJob` e `SetZonesJob` passano le coppie numeriche direttamente:
+nel corpo HTTP `sectors=1,0` e `zones=6,1` mantengono la virgola letterale.
+La 0.3.2 preserva questa virgola solo nelle coppie singole validate; credenziali,
+token e altri campi conservano l’escaping. Le risposte sono XML.
 La trasformazione delle credenziali del sito EWeb locale è un altro protocollo
 e non è applicata alle chiamate cloud.
 
@@ -115,3 +120,13 @@ Dopo la scrittura si rilegge lo stato; per le zone un bit di esclusione non
 corrispondente al valore richiesto produce un esito non confermato.
 Nessuna scrittura viene ripetuta automaticamente, nemmeno dopo timeout.
 Il collaudo è simulato: nessun comando è stato inviato all’impianto reale.
+
+## Correzione della serializzazione (0.3.2)
+
+Segnalazione sul campo nella 0.3.1: `/avs/set_sectors` restituisce
+`BAD-ARGUMENT`. Il confronto con `Utils.getPostDataString`, `SetSectorsJob`
+e `SetZonesJob` ha rilevato una differenza: il client inviava `%2C` dove l’app
+invia una virgola letterale. La correzione è verificata sul corpo HTTP esatto,
+non solo tramite `parse_qs` che rende indistinguibili le due rappresentazioni.
+Il legame con il rifiuto osservato resta da confermare sull’impianto reale.
+Non vengono disabilitati controlli né ripetute scritture automaticamente.

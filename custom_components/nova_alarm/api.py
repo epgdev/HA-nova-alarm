@@ -164,8 +164,19 @@ def parse_xml(data: bytes, *, authenticating: bool = False) -> ET.Element:
 
 
 def encode_form(params: dict[str, str]) -> bytes:
-    # Match Android Utils.encodeString + Utils.getPostDataString, exactly once.
-    value = urlencode({k: v.strip() for k, v in params.items()}, quote_via=quote_plus, safe="*")
+    # The APK encodes credentials before joining the form, but SetSectorsJob
+    # and SetZonesJob pass their numeric comma-separated arguments verbatim.
+    # Preserve only that validated delimiter; keep escaping all other values.
+    fields = []
+    for key, raw in params.items():
+        value = raw.strip()
+        command_pair = (key == "sectors" and re.fullmatch(r"[0-9]+,[0-4]", value)) or (
+            key == "zones" and re.fullmatch(r"[0-9]+,[01]", value)
+        )
+        fields.append(
+            urlencode({key: value}, quote_via=quote_plus, safe="*," if command_pair else "*")
+        )
+    value = "&".join(fields)
     return value.replace("+", "%20").replace("~", "%7E").encode("utf-8")
 
 
