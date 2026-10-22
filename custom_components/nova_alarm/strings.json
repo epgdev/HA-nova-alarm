@@ -1,0 +1,115 @@
+{
+  "title": "Nova Alarm",
+  "config": {
+    "step": {
+      "user": {
+        "title": "AVS cloud account",
+        "description": "Enter the credentials used in Mio Antifurto. Device ID is optional: reuse the probe ID to avoid registering another device.",
+        "data": {
+          "username": "Username",
+          "password": "Password",
+          "device_id": "Existing device ID (optional)"
+        },
+        "data_description": {
+          "device_id": "16 lowercase hexadecimal characters. Leave empty to generate a stable ID."
+        }
+      },
+      "plant": {
+        "title": "Installation and PIN",
+        "description": "This version only reads states. Signing in can register a device in the AVS account.",
+        "data": {
+          "plant_id": "Installation",
+          "pin": "Central panel PIN"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Update AVS credentials",
+        "description": "Enter the account credentials and central panel PIN for the configured installation.",
+        "data": {
+          "username": "Username",
+          "password": "Password",
+          "pin": "Central panel PIN"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Authentication refused. Check account credentials and PIN in the AVS app.",
+      "invalid_pin": "Enter a numeric PIN. Leading zeros are preserved.",
+      "invalid_device_id": "Enter 16 lowercase hexadecimal characters.",
+      "cannot_connect": "Cannot read the installation. Check connectivity and try again later.",
+      "account_error": "AVS account needs attention: check subscription, device limit or consent in the official app.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "This installation is already configured.",
+      "plant_not_found": "This account does not contain the configured installation.",
+      "reauth_successful": "Credentials updated."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Updates and mode mapping",
+        "description": "These settings only change the state displayed in Home Assistant. They do not send alarm commands. Mode labels can be customized by the installer.",
+        "data": {
+          "scan_interval": "Update interval (seconds)",
+          "mode_on": "HA state for AVS ON",
+          "mode_ho": "HA state for AVS HO",
+          "mode_ar": "HA state for AVS AR",
+          "mode_pe": "HA state for AVS PE"
+        }
+      }
+    }
+  },
+  "selector": {
+    "alarm_mode": {
+      "options": {
+        "armed_away": "Armed away",
+        "armed_home": "Armed home",
+        "armed_night": "Armed night",
+        "armed_custom_bypass": "Armed custom bypass",
+        "armed_vacation": "Armed vacation"
+      }
+    }
+  },
+  "entity": {
+    "alarm_control_panel": {
+      "sector": {
+        "name": "{sector}"
+      }
+    },
+    "sensor": {
+      "avs_mode": {
+        "name": "{sector} AVS mode"
+      }
+    },
+    "binary_sensor": {
+      "opening": {
+        "name": "{zone}"
+      },
+      "tamper": {
+        "name": "{zone} tamper"
+      },
+      "excluded": {
+        "name": "{zone} excluded"
+      },
+      "battery": {
+        "name": "{zone} low battery"
+      },
+      "fault": {
+        "name": "{zone} fault"
+      },
+      "antimask": {
+        "name": "{zone} antimask"
+      },
+      "alarm_memory": {
+        "name": "{zone} alarm memory"
+      }
+    }
+  },
+  "exceptions": {
+    "read_only": {
+      "message": "This version of Nova Alarm only reads states. Alarm commands are not available."
+    }
+  }
+}

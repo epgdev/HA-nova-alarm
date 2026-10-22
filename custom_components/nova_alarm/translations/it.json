@@ -1,0 +1,115 @@
+{
+  "title": "Nova Alarm",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Account cloud AVS",
+        "description": "Inserisci le credenziali di Mio Antifurto. L’ID dispositivo è facoltativo: puoi riutilizzare quello della prova per evitare di registrare un altro dispositivo.",
+        "data": {
+          "username": "Nome utente",
+          "password": "Password",
+          "device_id": "ID dispositivo esistente (facoltativo)"
+        },
+        "data_description": {
+          "device_id": "16 caratteri esadecimali minuscoli. Lascia vuoto per generare un ID stabile."
+        }
+      },
+      "plant": {
+        "title": "Impianto e PIN",
+        "description": "Questa versione legge soltanto gli stati. L’accesso può registrare un dispositivo nell’account AVS.",
+        "data": {
+          "plant_id": "Impianto",
+          "pin": "PIN della centrale"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Aggiorna credenziali AVS",
+        "description": "Inserisci le credenziali dell’account e il PIN della centrale per l’impianto già configurato.",
+        "data": {
+          "username": "Nome utente",
+          "password": "Password",
+          "pin": "PIN della centrale"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Autenticazione rifiutata. Verifica credenziali e PIN nell’app AVS.",
+      "invalid_pin": "Inserisci un PIN numerico. Gli zeri iniziali vengono conservati.",
+      "invalid_device_id": "Inserisci 16 caratteri esadecimali minuscoli.",
+      "cannot_connect": "Impossibile leggere l’impianto. Verifica la connessione e riprova più tardi.",
+      "account_error": "L’account AVS richiede attenzione: controlla abbonamento, limite dispositivi o consensi nell’app ufficiale.",
+      "unknown": "Errore inatteso."
+    },
+    "abort": {
+      "already_configured": "Questo impianto è già configurato.",
+      "plant_not_found": "L’account non contiene l’impianto configurato.",
+      "reauth_successful": "Credenziali aggiornate."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Aggiornamenti e modalità",
+        "description": "Queste opzioni cambiano soltanto lo stato visualizzato in Home Assistant. Non inviano comandi all’allarme. Le modalità possono avere nomi personalizzati dall’installatore.",
+        "data": {
+          "scan_interval": "Intervallo aggiornamento (secondi)",
+          "mode_on": "Stato HA per AVS ON",
+          "mode_ho": "Stato HA per AVS HO",
+          "mode_ar": "Stato HA per AVS AR",
+          "mode_pe": "Stato HA per AVS PE"
+        }
+      }
+    }
+  },
+  "selector": {
+    "alarm_mode": {
+      "options": {
+        "armed_away": "Inserito fuori casa",
+        "armed_home": "Inserito in casa",
+        "armed_night": "Inserito notte",
+        "armed_custom_bypass": "Inserito personalizzato",
+        "armed_vacation": "Inserito vacanza"
+      }
+    }
+  },
+  "entity": {
+    "alarm_control_panel": {
+      "sector": {
+        "name": "{sector}"
+      }
+    },
+    "sensor": {
+      "avs_mode": {
+        "name": "{sector} modalità AVS"
+      }
+    },
+    "binary_sensor": {
+      "opening": {
+        "name": "{zone}"
+      },
+      "tamper": {
+        "name": "{zone} manomissione"
+      },
+      "excluded": {
+        "name": "{zone} esclusa"
+      },
+      "battery": {
+        "name": "{zone} batteria scarica"
+      },
+      "fault": {
+        "name": "{zone} guasto"
+      },
+      "antimask": {
+        "name": "{zone} antimascheramento"
+      },
+      "alarm_memory": {
+        "name": "{zone} memoria allarme"
+      }
+    }
+  },
+  "exceptions": {
+    "read_only": {
+      "message": "Questa versione di Nova Alarm legge soltanto gli stati. I comandi all’allarme non sono disponibili."
+    }
+  }
+}

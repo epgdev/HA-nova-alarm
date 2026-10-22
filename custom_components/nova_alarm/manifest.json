@@ -1,0 +1,14 @@
+{
+  "domain": "nova_alarm",
+  "name": "Nova Alarm",
+  "version": "0.1.0",
+  "config_flow": true,
+  "documentation": "https://github.com/epgdev/HA-nova-alarm",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "codeowners": [
+    "@epgdev"
+  ],
+  "requirements": [],
+  "issue_tracker": "https://github.com/epgdev/HA-nova-alarm/issues"
+}
