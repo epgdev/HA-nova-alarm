@@ -7,14 +7,17 @@ Zone exclusion targets a single inactive zone. Device replacement is not impleme
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 import xml.etree.ElementTree as ET
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, replace
 from urllib.parse import quote_plus, unquote_plus, urlencode
 
 import aiohttp
 
 MAX_RESPONSE = 2 * 1024 * 1024
+LOGGER = logging.getLogger(__name__)
 ALLOWED_ENDPOINTS = frozenset(
     {
         "/avs/felist",
@@ -222,6 +225,7 @@ class AvsClient:
         *,
         pin: str = "",
         plant: Plant | None = None,
+        keep_session: bool = False,
     ) -> None:
         self._session = session
         self._username = username
@@ -229,6 +233,7 @@ class AvsClient:
         self._pin = pin
         self._device_id = device_id
         self.plant = plant
+        self._keep_session = keep_session
         self._server = "https://fe1.myavsalarm.com:443"
         self._discovered = False
         self._auth = ""
@@ -411,8 +416,18 @@ class AvsClient:
         return Snapshot(sectors, zones)
 
     async def async_snapshot(self) -> Snapshot:
-        async with self._lock:
+        async with self._operation():
             return await self._snapshot_with_renewal()
+
+    @asynccontextmanager
+    async def _operation(self):
+        """Serialize the whole operation, including release of its AVS session."""
+        async with self._lock:
+            try:
+                yield
+            finally:
+                if not self._keep_session:
+                    await self._logout()
 
     async def _snapshot_with_renewal(self) -> Snapshot:
         """Read under the caller's lock; only reads may be retried automatically."""
@@ -437,7 +452,7 @@ class AvsClient:
             raise CommandRejected("A single nonzero sector is required")
         if type(mode) is not int or mode not in range(5):
             raise CommandRejected("Unsupported AVS mode")
-        async with self._lock:
+        async with self._operation():
             snapshot = await self._snapshot_with_renewal()
             sector = snapshot.sectors.get(sector_id)
             if sector is None or mode not in sector.allowed_modes:
@@ -465,7 +480,7 @@ class AvsClient:
             raise CommandRejected("A single nonzero zone is required")
         if type(excluded) is not bool:
             raise CommandRejected("Exclusion must be a boolean")
-        async with self._lock:
+        async with self._operation():
             snapshot = await self._snapshot_with_renewal()
             zone = snapshot.zones.get(zone_id)
             if zone is None or zone.flags is None:
@@ -488,11 +503,23 @@ class AvsClient:
 
     async def async_close(self) -> None:
         async with self._lock:
-            try:
-                if self._token:
-                    async with asyncio.timeout(10):
-                        await self._read("/avs/logout")
-            except AvsError, TimeoutError:
-                pass
-            finally:
-                self._auth = self._token = ""
+            await self._logout()
+
+    async def _logout(self) -> None:
+        """Release our session only; the caller holds the operation lock."""
+        try:
+            if self._token:
+                async with asyncio.timeout(10):
+                    await self._read("/avs/logout")
+        except SessionExpired:
+            pass  # Already expired; there is no valid session to close.
+        except AvsError as error:
+            LOGGER.warning(
+                "AVS logout unconfirmed: category=%s reason=%s; server session may persist",
+                type(error).__name__,
+                error.reason,
+            )
+        except TimeoutError:
+            LOGGER.warning("AVS logout unconfirmed: reason=timeout; server session may persist")
+        finally:
+            self._auth = self._token = ""

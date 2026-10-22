@@ -69,10 +69,14 @@
           "mode_ar": "Stato HA per AVS AR",
           "mode_pe": "Stato HA per AVS PE",
           "enabled_modes": "Modalità di inserimento visibili",
-          "require_command_pin": "Richiedi il PIN per inserire e disinserire"
+          "require_command_pin": "Richiedi il PIN per inserire e disinserire",
+          "keep_session": "Mantieni la sessione AVS aperta",
+          "automatic_updates": "Aggiornamenti automatici"
         },
         "data_description": {
-          "require_command_pin": "Se disattivato, chi può controllare il pannello in Home Assistant può inserire e disinserire senza digitare il PIN. Il PIN della centrale resta necessario per la connessione AVS."
+          "require_command_pin": "Se disattivato, chi può controllare il pannello in Home Assistant può inserire e disinserire senza digitare il PIN. Il PIN della centrale resta necessario per la connessione AVS.",
+          "keep_session": "Lascia disattivato per eseguire il logout dopo ogni operazione e liberare la sessione per l’app. Le nuove letture richiedono un nuovo accesso.",
+          "automatic_updates": "Disattiva per evitare accessi periodici mentre usi l’app. Stati e sensori si aggiorneranno solo all’avvio, su richiesta o dopo i comandi."
         }
       }
     },

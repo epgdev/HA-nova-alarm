@@ -2,7 +2,9 @@
 
 DOMAIN = "nova_alarm"
 NAME = "Nova Alarm"
-VERSION = "0.3.3"
+VERSION = "0.4.0"
+CONF_KEEP_SESSION = "keep_session"
+CONF_AUTOMATIC_UPDATES = "automatic_updates"
 CONF_REQUIRE_COMMAND_PIN = "require_command_pin"
 CONF_ENABLED_MODES = "enabled_modes"
 DEFAULT_ENABLED_MODES = ["ON", "HO", "AR", "PE"]

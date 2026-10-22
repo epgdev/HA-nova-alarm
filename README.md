@@ -1,4 +1,4 @@
-# Nova Alarm per Home Assistant — 0.3.3
+# Nova Alarm per Home Assistant — 0.4.0
 
 Prima versione sperimentale di una **custom integration** per il cloud AVS.
 Si configura da Impostazioni → Dispositivi e servizi. Non è un add-on da
@@ -36,7 +36,7 @@ con dominio `mio_antifurto` deve essere rimossa se era stata installata.
   guasto, antimascheramento e memoria allarme di ciascuna zona.
 - Nomi delle zone e dei settori recuperati dal cloud, se disponibili.
 - Aggiornamento coordinato ogni **60 secondi**, modificabile da 30 a 600.
-- Sessione condivisa fra le entità, richieste serializzate, un solo tentativo
+- Sessioni brevi condivise fra le entità durante ogni operazione, richieste serializzate, un solo tentativo
   di rinnovo per aggiornamento quando la sessione scade.
 - Nuova richiesta delle credenziali se l'autenticazione viene rifiutata.
 - Traduzioni italiane e inglesi; identificativi stabili delle entità.
@@ -319,3 +319,32 @@ la sessione AVS e non viene eliminato o esposto nelle entità. L’opzione
 riguarda solo il controllo locale dei comandi in HA, non il protocollo AVS,
 i permessi, le esclusioni o i controlli sulle zone. L’aggiornamento e la
 modifica dell’opzione non inviano comandi all’impianto.
+
+## Convivenza con l’app Mio Antifurto (0.4.0)
+
+Prima della 0.4.0 l’integrazione manteneva la sessione aperta tra i polling.
+Ora, per default, dopo ogni lettura e ogni comando tenta il logout della
+**propria** sessione, anche se l’operazione fallisce o viene annullata. La
+rilettura successiva a un comando apre e chiude una propria sessione.
+L’ID dispositivo rimane quello salvato, non viene generato a ogni accesso.
+Le descrizioni già lette rimangono in cache per non richiederle a ogni login.
+
+Aggiorna e riavvia HA. Nelle opzioni:
+
+- **Mantieni la sessione AVS aperta**: lascia disattivato per liberare la
+  sessione tra le operazioni. Attivandolo si torna al comportamento precedente.
+- **Aggiornamenti automatici**: puoi disattivarli per evitare accessi periodici
+  mentre usi l’app. Restano la lettura iniziale all’avvio/reload, gli aggiornamenti
+  richiesti manualmente (per esempio `homeassistant.update_entity`) e le riletture
+  dopo i comandi. I sensori non si aggiornano autonomamente in questa modalità:
+  non interpretare un vecchio stato come una lettura attuale.
+
+Il logout riduce l’occupazione della sessione, ma non aggira eventuali limiti
+AVS sugli accessi simultanei: durante una lettura/comando HA la sessione resta
+necessaria. Gli accessi più frequenti aumentano anche il numero di login/logout;
+non è consigliato ridurre aggressivamente il polling. Se il server risponde
+`TOO-MANY-USERS` non vengono espulse sessioni altrui né forzati accessi.
+Un logout fallito viene segnalato nei registri come `AVS logout unconfirmed`:
+la cancellazione dei token locali non garantisce la chiusura sul server.
+La convivenza effettiva con l’app resta da verificare sull’impianto; lo sviluppo
+ha usato esclusivamente risposte simulate e non ha inviato comandi reali.

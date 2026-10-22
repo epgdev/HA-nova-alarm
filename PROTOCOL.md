@@ -1,4 +1,4 @@
-# Note di protocollo — versione 0.3.2
+# Note di protocollo — versione 0.4.0
 
 Ricostruzione statica dall'APK Mio Antifurto fornito dall'utente, con prima
 verifica effettiva dell'accesso e delle letture tramite lo script Python.
@@ -130,3 +130,16 @@ invia una virgola letterale. La correzione è verificata sul corpo HTTP esatto,
 non solo tramite `parse_qs` che rende indistinguibili le due rappresentazioni.
 Il legame con il rifiuto osservato resta da confermare sull’impianto reale.
 Non vengono disabilitati controlli né ripetute scritture automaticamente.
+
+## Durata delle sessioni (0.4.0)
+
+`LogoutJob.run` dell’APK invia solo `auth` e `session` a `/avs/logout`.
+La modalità predefinita ora racchiude ogni lettura/comando e il relativo logout
+nel medesimo lock. Il login non viene duplicato fra prelettura e scrittura;
+la conferma coordinata successiva è una lettura con una nuova sessione breve.
+Il rilascio avviene nel `finally` anche su rifiuto o annullamento. Non vengono
+chiuse sessioni di altri client. L’opzione `keep_session=true` ripristina
+esplicitamente il riuso precedente; `automatic_updates=false` disabilita il
+polling coordinato, non gli aggiornamenti iniziali/manuali/dopo comando.
+La risposta `TOO-MANY-USERS` resta un errore da rispettare, senza tentativi di
+forzatura; la reale politica di concorrenza del server non è stata verificata.

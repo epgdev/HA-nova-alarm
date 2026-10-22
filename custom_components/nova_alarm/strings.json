@@ -69,10 +69,14 @@
           "mode_ar": "HA state for AVS AR",
           "mode_pe": "HA state for AVS PE",
           "enabled_modes": "Visible arming modes",
-          "require_command_pin": "Require PIN to arm and disarm"
+          "require_command_pin": "Require PIN to arm and disarm",
+          "keep_session": "Keep the AVS session open",
+          "automatic_updates": "Automatic updates"
         },
         "data_description": {
-          "require_command_pin": "When disabled, anyone allowed to control this panel in Home Assistant can arm and disarm without entering a PIN. The panel PIN is still required for the AVS connection."
+          "require_command_pin": "When disabled, anyone allowed to control this panel in Home Assistant can arm and disarm without entering a PIN. The panel PIN is still required for the AVS connection.",
+          "keep_session": "Leave disabled to log out after each operation and release the session for the app. New reads require signing in again.",
+          "automatic_updates": "Disable to avoid periodic sign-ins while using the app. States and sensors update only at startup, on request or after commands."
         }
       }
     },

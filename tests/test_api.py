@@ -28,7 +28,13 @@ def xml(text):
 
 def make_client():
     return AvsClient(
-        MagicMock(), "user", "pass", "1234567890abcdef", pin="01234", plant=Plant("plant", "Casa")
+        MagicMock(),
+        "user",
+        "pass",
+        "1234567890abcdef",
+        pin="01234",
+        plant=Plant("plant", "Casa"),
+        keep_session=True,
     )
 
 

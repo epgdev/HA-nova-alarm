@@ -6,7 +6,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import AvsClient, Plant
-from .const import CONF_DEVICE_ID, CONF_PIN, CONF_PLANT_ID, CONF_PLANT_NAME
+from .const import CONF_DEVICE_ID, CONF_KEEP_SESSION, CONF_PIN, CONF_PLANT_ID, CONF_PLANT_NAME
 from .coordinator import AvsCoordinator
 
 PLATFORMS = [Platform.ALARM_CONTROL_PANEL, Platform.BINARY_SENSOR, Platform.SENSOR, Platform.SWITCH]
@@ -20,6 +20,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.data[CONF_DEVICE_ID],
         pin=entry.data[CONF_PIN],
         plant=Plant(entry.data[CONF_PLANT_ID], entry.data[CONF_PLANT_NAME]),
+        keep_session=entry.options.get(CONF_KEEP_SESSION, False),
     )
     coordinator = AvsCoordinator(hass, entry, client)
     try:

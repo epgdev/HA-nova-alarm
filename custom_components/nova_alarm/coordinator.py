@@ -18,7 +18,7 @@ from .api import (
     InvalidAuth,
     Snapshot,
 )
-from .const import CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL, DOMAIN
+from .const import CONF_AUTOMATIC_UPDATES, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL, DOMAIN
 
 LOGGER = logging.getLogger(__name__)
 
@@ -30,8 +30,10 @@ class AvsCoordinator(DataUpdateCoordinator[Snapshot]):
             LOGGER,
             name=DOMAIN,
             config_entry=entry,
-            update_interval=timedelta(
-                seconds=entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+            update_interval=(
+                timedelta(seconds=entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
+                if entry.options.get(CONF_AUTOMATIC_UPDATES, True)
+                else None
             ),
             always_update=False,
         )

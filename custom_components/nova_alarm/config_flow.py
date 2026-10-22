@@ -23,8 +23,10 @@ from homeassistant.helpers.selector import (
 
 from .api import AccountError, AvsClient, AvsError, CannotConnect, InvalidAuth, Plant, ProtocolError
 from .const import (
+    CONF_AUTOMATIC_UPDATES,
     CONF_DEVICE_ID,
     CONF_ENABLED_MODES,
+    CONF_KEEP_SESSION,
     CONF_PIN,
     CONF_PLANT_ID,
     CONF_PLANT_NAME,
@@ -245,6 +247,10 @@ class AvsOptionsFlow(config_entries.OptionsFlow):
             errors["base"] = "duplicate_modes"
         current = user_input if user_input is not None else self.config_entry.options
         fields = {
+            vol.Required(CONF_KEEP_SESSION, default=current.get(CONF_KEEP_SESSION, False)): bool,
+            vol.Required(
+                CONF_AUTOMATIC_UPDATES, default=current.get(CONF_AUTOMATIC_UPDATES, True)
+            ): bool,
             vol.Required(
                 CONF_REQUIRE_COMMAND_PIN,
                 default=current.get(CONF_REQUIRE_COMMAND_PIN, True),
