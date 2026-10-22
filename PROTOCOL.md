@@ -1,4 +1,4 @@
-# Note di protocollo — versione 0.2.0
+# Note di protocollo — versione 0.3.0
 
 Ricostruzione statica dall'APK Mio Antifurto fornito dall'utente, con prima
 verifica effettiva dell'accesso e delle letture tramite lo script Python.
@@ -97,3 +97,21 @@ Le scritture non vengono ripetute dopo errori, sessione scaduta o timeout.
 Home Assistant rilegge lo stato anche dopo un errore del comando; non pubblica
 uno stato di inserimento o disinserimento basato sulla sola richiesta.
 Queste richieste sono verificate con test simulati, non ancora sul campo.
+
+## Esclusione/inclusione zone (0.3.0)
+
+Evidenza statica: `SetZonesJob.run`, `XMLSetZonesParser.Handler.startElement`,
+`plantZonesDetail.include`, `plantZonesDetail.esclude`, `Zone.setFlags`.
+
+`POST /avs/set_zones` invia `auth`, `session`, `zones=<id>,<esclusione>`:
+1 esclude, 0 reinclude. L’app blocca entrambe le modifiche quando `isActive()`
+è vero, che corrisponde al bit 3 (`flags & 8`) della zona. Il client verifica
+lo stesso bit su una lettura fresca sotto il lock condiviso; zona mancante,
+flags sconosciuti e ID aggregati/non numerici non sono comandabili.
+Se il bit di esclusione (2) è già quello richiesto non viene inviata la scrittura.
+La risposta deve avere un unico `SET_ZONES status="0"`; status mancanti,
+sconosciuti o non zero sono rifiutati. Non si espongono risposte remote o segreti.
+Dopo la scrittura si rilegge lo stato; per le zone un bit di esclusione non
+corrispondente al valore richiesto produce un esito non confermato.
+Nessuna scrittura viene ripetuta automaticamente, nemmeno dopo timeout.
+Il collaudo è simulato: nessun comando è stato inviato all’impianto reale.

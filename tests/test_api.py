@@ -144,10 +144,10 @@ async def test_parallel_updates_are_serialized():
     assert maximum == 1
 
 
-async def test_client_does_not_allow_zone_bypass():
+async def test_client_does_not_allow_user_code_changes():
     client = make_client()
     with pytest.raises(ProtocolError):
-        await client._post("/avs/set_zones", {"mode": "4"})
+        await client._post("/avs/set_user_code", {"mode": "4"})
 
 
 @pytest.mark.parametrize("mode", range(5))
@@ -282,3 +282,102 @@ async def test_poll_and_command_share_one_lock():
     client._post = post
     await asyncio.gather(client.async_set_sector_mode("1", 4), client.async_snapshot())
     assert order == ["read-start", "read-end", "write-start", "write-end", "read-start", "read-end"]
+
+
+@pytest.mark.parametrize("excluded,flags", [(True, 0), (False, 4)])
+async def test_zone_command_wire_format(excluded, flags):
+    client = make_client()
+    client._auth, client._token = "auth", "session"
+    data = parse_snapshot(
+        xml('<AVS><GET_SECTORS><ITEM id="1" type="4"/></GET_SECTORS></AVS>'),
+        xml(f'<AVS><GET_ZONES><ITEM id="6" flags="{flags}"/></GET_ZONES></AVS>'),
+    )
+    client._snapshot_with_renewal = AsyncMock(return_value=data)
+    response = MagicMock()
+    response.status = 200
+
+    async def chunks(size):
+        yield b'<AVS><SET_ZONES status="0"/></AVS>'
+
+    response.content.iter_chunked = chunks
+    context = MagicMock()
+    context.__aenter__ = AsyncMock(return_value=response)
+    client._session.post.return_value = context
+    await client.async_set_zone_excluded("6", excluded)
+    call = client._session.post.call_args
+    assert call.args == ("https://fe1.myavsalarm.com:443/avs/set_zones",)
+    assert parse_qs(call.kwargs["data"].decode()) == {
+        "auth": ["auth"],
+        "session": ["session"],
+        "zones": [f"6,{int(excluded)}"],
+    }
+    client._session.post.assert_called_once()
+
+
+@pytest.mark.parametrize("zone_id,flags", [("6", 8), ("6", 12), ("6", None), ("7", 0)])
+@pytest.mark.parametrize("excluded", [True, False])
+async def test_active_unknown_or_missing_zone_never_written(zone_id, flags, excluded):
+    client = make_client()
+    data = parse_snapshot(
+        xml('<AVS><GET_SECTORS><ITEM id="1" type="4"/></GET_SECTORS></AVS>'),
+        xml("<AVS><GET_ZONES/></AVS>"),
+    )
+    from custom_components.nova_alarm.api import Zone
+
+    data.zones["6"] = Zone("6", flags)
+    client._snapshot_with_renewal = AsyncMock(return_value=data)
+    client._post = AsyncMock()
+    with pytest.raises(CommandRejected):
+        await client.async_set_zone_excluded(zone_id, excluded)
+    client._post.assert_not_awaited()
+
+
+@pytest.mark.parametrize("zone_id,excluded", [("0", True), ("1,2", True), ("-1", True), ("1", 1)])
+async def test_invalid_zone_command_never_connects(zone_id, excluded):
+    client = make_client()
+    client._login = AsyncMock()
+    with pytest.raises(CommandRejected):
+        await client.async_set_zone_excluded(zone_id, excluded)
+    client._login.assert_not_awaited()
+
+
+@pytest.mark.parametrize("excluded,flags", [(True, 4), (False, 0)])
+async def test_zone_already_matches_does_not_write(excluded, flags):
+    client = make_client()
+    client._snapshot_with_renewal = AsyncMock(
+        return_value=parse_snapshot(
+            xml('<AVS><GET_SECTORS><ITEM id="1" type="4"/></GET_SECTORS></AVS>'),
+            xml(f'<AVS><GET_ZONES><ITEM id="6" flags="{flags}"/></GET_ZONES></AVS>'),
+        )
+    )
+    client._post = AsyncMock()
+    await client.async_set_zone_excluded("6", excluded)
+    client._post.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "result,error",
+    [
+        ('<AVS><SET_ZONES status="1"/></AVS>', CommandRejected),
+        ("<AVS><SET_ZONES/></AVS>", CommandRejected),
+        ("<AVS/>", ProtocolError),
+        (CannotConnect("timeout"), CannotConnect),
+        (SessionExpired("expired"), CannotConnect),
+    ],
+)
+async def test_zone_failure_is_never_retried(result, error):
+    client = make_client()
+    client._snapshot_with_renewal = AsyncMock(
+        return_value=parse_snapshot(
+            xml('<AVS><GET_SECTORS><ITEM id="1" type="4"/></GET_SECTORS></AVS>'),
+            xml('<AVS><GET_ZONES><ITEM id="6" flags="0"/></GET_ZONES></AVS>'),
+        )
+    )
+    client._post = AsyncMock()
+    if isinstance(result, Exception):
+        client._post.side_effect = result
+    else:
+        client._post.return_value = xml(result)
+    with pytest.raises(error):
+        await client.async_set_zone_excluded("6", True)
+    client._post.assert_awaited_once()

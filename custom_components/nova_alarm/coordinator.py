@@ -1,6 +1,7 @@
 """One coordinated cloud poll for all entities in an installation."""
 
 import logging
+from collections.abc import Awaitable
 from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
@@ -37,15 +38,27 @@ class AvsCoordinator(DataUpdateCoordinator[Snapshot]):
         self.client = client
 
     async def async_set_sector_mode(self, sector_id: str, mode: int) -> None:
+        await self._async_command(self.client.async_set_sector_mode(sector_id, mode))
+
+    async def async_set_zone_excluded(self, zone_id: str, excluded: bool) -> None:
+        await self._async_command(self.client.async_set_zone_excluded(zone_id, excluded))
+        zone = self.data.zones.get(zone_id)
+        if zone is None or zone.bit(2) != excluded:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN, translation_key="command_unconfirmed"
+            )
+
+    async def _async_command(self, command: Awaitable[None]) -> None:
         try:
-            await self.client.async_set_sector_mode(sector_id, mode)
+            await command
         except AvsError as error:
             # A failed response may follow an applied command. Reconcile with a read,
             # without replaying the write or publishing an optimistic alarm state.
-            await self.async_request_refresh()
+            await self.async_refresh()
             key = "command_rejected" if isinstance(error, CommandRejected) else "command_failed"
             raise HomeAssistantError(translation_domain=DOMAIN, translation_key=key) from None
-        await self.async_request_refresh()
+        # Commands need a completed read now, not a debounced future refresh.
+        await self.async_refresh()
         if not self.last_update_success:
             raise HomeAssistantError(
                 translation_domain=DOMAIN, translation_key="command_unconfirmed"

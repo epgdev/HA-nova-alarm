@@ -50,18 +50,19 @@
     "step": {
       "init": {
         "title": "Aggiornamenti e modalità",
-        "description": "La corrispondenza determina sia gli stati visualizzati sia i comandi inviati. Assegna uno stato HA diverso a ogni modalità AVS e verifica i nomi nell’app ufficiale. I comandi mantengono i controlli sulle zone, senza forzare l’inserimento.",
+        "description": "Seleziona le modalità da mostrare: per il solo inserimento ON lascia selezionato solo ON. OFF resta sempre disponibile. La corrispondenza determina stati e comandi; assegna stati HA diversi alle modalità selezionate. Nascondere una modalità non cambia la configurazione della centrale.",
         "data": {
           "scan_interval": "Intervallo aggiornamento (secondi)",
           "mode_on": "Stato HA per AVS ON",
           "mode_ho": "Stato HA per AVS HO",
           "mode_ar": "Stato HA per AVS AR",
-          "mode_pe": "Stato HA per AVS PE"
+          "mode_pe": "Stato HA per AVS PE",
+          "enabled_modes": "Modalità di inserimento visibili"
         }
       }
     },
     "error": {
-      "duplicate_modes": "Assegna uno stato HA diverso a ogni modalità AVS."
+      "duplicate_modes": "Assegna uno stato HA diverso a ogni modalità selezionata."
     }
   },
   "selector": {
@@ -108,6 +109,11 @@
       "alarm_memory": {
         "name": "{zone} memoria allarme"
       }
+    },
+    "switch": {
+      "zone_exclusion": {
+        "name": "{zone} esclusione"
+      }
     }
   },
   "exceptions": {
@@ -121,13 +127,16 @@
       "message": "Questa modalità non è consentita per il settore o lo stato non è disponibile."
     },
     "command_rejected": {
-      "message": "La centrale ha rifiutato il comando o la modalità non è consentita. Controlla zone aperte, anomalie e permessi nell’app ufficiale. Non è stato forzato l’inserimento."
+      "message": "La centrale ha rifiutato il comando o l’operazione non è consentita. Controlla zone, anomalie e permessi nell’app ufficiale."
     },
     "command_failed": {
       "message": "Invio del comando non confermato. Controlla lo stato nell’app ufficiale prima di riprovare. Il comando non è stato ritentato automaticamente."
     },
     "command_unconfirmed": {
-      "message": "Comando accettato, ma rilettura dello stato fallita. Controlla lo stato nell’app ufficiale prima di riprovare."
+      "message": "Comando accettato, ma lo stato richiesto non è ancora confermato dalla centrale. Attendi l’aggiornamento e controlla nell’app ufficiale prima di riprovare."
+    },
+    "zone_not_editable": {
+      "message": "La zona è attiva o il suo stato non è disponibile. Modifica le esclusioni a impianto disinserito."
     }
   }
 }

@@ -1,7 +1,7 @@
 """Async AVS cloud client, reconstructed from the supplied Android APK.
 
 Commands target a single sector, with the same zone checks as the Android app.
-Zone bypass and device replacement are not implemented.
+Zone exclusion targets a single inactive zone. Device replacement is not implemented.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ ALLOWED_ENDPOINTS = frozenset(
         "/avs/get_zones",
         "/avs/get_desc",
         "/avs/set_sectors",
+        "/avs/set_zones",
         "/avs/logout",
     }
 )
@@ -397,6 +398,31 @@ class AvsClient:
             if result.get("status") != "0":
                 # Never expose errstr, bypass checks or retry with checkzone=0.
                 raise CommandRejected("Panel refused the command; check zones in the official app")
+
+    async def async_set_zone_excluded(self, zone_id: str, excluded: bool) -> None:
+        """Exclude/include a single inactive zone, as in the Android zone detail page."""
+        if not re.fullmatch(r"[0-9]+", zone_id) or int(zone_id) == 0:
+            raise CommandRejected("A single nonzero zone is required")
+        if type(excluded) is not bool:
+            raise CommandRejected("Exclusion must be a boolean")
+        async with self._lock:
+            snapshot = await self._snapshot_with_renewal()
+            zone = snapshot.zones.get(zone_id)
+            if zone is None or zone.flags is None:
+                raise CommandRejected("Zone state is unavailable")
+            if zone.bit(3):
+                raise CommandRejected("An active zone cannot be excluded or included")
+            if zone.bit(2) == excluded:
+                return
+            try:
+                root = await self._read("/avs/set_zones", {"zones": f"{zone_id},{int(excluded)}"})
+            except SessionExpired:
+                self._auth = self._token = ""
+                raise CannotConnect(
+                    "Command session expired; refresh before trying again"
+                ) from None
+            if required_element(root, "SET_ZONES").get("status") != "0":
+                raise CommandRejected("Panel refused the zone command")
 
     async def async_close(self) -> None:
         async with self._lock:

@@ -1,4 +1,4 @@
-# Nova Alarm per Home Assistant — 0.2.0
+# Nova Alarm per Home Assistant — 0.3.0
 
 Prima versione sperimentale di una **custom integration** per il cloud AVS.
 Si configura da Impostazioni → Dispositivi e servizi. Non è un add-on da
@@ -30,7 +30,9 @@ con dominio `mio_antifurto` deve essere rimossa se era stata installata.
 - Un `alarm_control_panel` per settore, con inserimento e disinserimento protetti da PIN.
 - Comandi ON, HO, AR, PE, OFF con controlli sulle zone e permessi restituiti dalla centrale.
 - Un sensore con la modalità originale AVS: ON, HO, AR, PE, OFF.
-- Sensori binari per apertura, manomissione, esclusione, batteria scarica,
+- Modalità di inserimento visibili configurabili (per esempio solo ON).
+- Interruttori normali per escludere e reincludere ogni zona.
+- Sensori binari per apertura, manomissione, batteria scarica,
   guasto, antimascheramento e memoria allarme di ciascuna zona.
 - Nomi delle zone e dei settori recuperati dal cloud, se disponibili.
 - Aggiornamento coordinato ogni **60 secondi**, modificabile da 30 a 600.
@@ -41,8 +43,8 @@ con dominio `mio_antifurto` deve essere rimossa se era stata installata.
 
 Per limitare l'affollamento, apertura e manomissione sono abilitate per default.
 Gli altri sensori diagnostici possono essere abilitati nella pagina delle entità.
-Il bit AVS `attiva` non viene esposto: la sua utilità come entità autonoma
-deve ancora essere verificata.
+Il bit AVS `attiva` non viene esposto come entità autonoma; viene controllato
+prima di modificare un’esclusione, come nell’app ufficiale.
 
 ## Installazione manuale
 
@@ -144,8 +146,8 @@ ad esempio `code: "01234"` (esempio fittizio).
 La corrispondenza nelle opzioni ora determina **sia gli stati sia i comandi**:
 per default Fuori casa → ON, In casa → HO, Personalizzato → AR, Notte → PE;
 Disinserisci invia OFF. Verifica nell’app ufficiale quali zone sono associate
-alle modalità del tuo impianto. Ogni modalità AVS deve avere uno stato HA
-distinto; vecchie corrispondenze duplicate rendono il relativo comando ambiguo
+alle modalità del tuo impianto. Ogni modalità AVS selezionata deve avere uno stato HA
+distinto; vecchie corrispondenze duplicate fra modalità visibili rendono il relativo comando ambiguo
 e quindi indisponibile finché non vengono corrette nelle opzioni.
 
 I pulsanti di inserimento compaiono solo per le modalità esplicitamente
@@ -166,9 +168,48 @@ l’esito può essere incerto. Controlla lo stato nell’app prima di riprovare.
 I comandi sono stati ricostruiti dall’APK e verificati con risposte simulate;
 **il collaudo su un impianto reale resta da effettuare**.
 
-### Aggiornare dalla 0.1.0
+### Mostrare solo ON
 
-Aggiorna tutti i file di `custom_components/nova_alarm` con quelli della 0.2.0
+Apri **Impostazioni → Dispositivi e servizi → Nova Alarm → Configura**
+(o Opzioni) e in **Modalità di inserimento visibili** lascia selezionato solo
+**ON**. Salva: rimarranno il comando di inserimento associato a ON (di default
+Fuori casa) e Disinserisci. Puoi anche nascondere tutti gli inserimenti lasciando
+vuota la selezione. Le modalità nascoste non sono comandabili tramite i servizi
+HA, ma lo stato effettivo continua a essere mostrato anche se l’impianto viene
+inserito in un’altra modalità dall’app. L’opzione non cambia la programmazione
+della centrale e si applica a tutti i settori dell’integrazione.
+
+### Escludere una zona prima di inserire l’allarme
+
+Dalla **0.3.0** ogni zona ha un interruttore **«Nome zona esclusione»**, abilitato
+per default fra i controlli normali del dispositivo, senza categoria diagnostica:
+
+- **Acceso = zona esclusa** dalla protezione.
+- **Spento = zona inclusa** nella protezione.
+
+A impianto disinserito, attiva l’esclusione delle zone desiderate e attendi che
+lo stato sia confermato. Poi inserisci l’allarme dal pannello usando il PIN.
+Escludere una zona non inserisce l’allarme e inserire l’allarme non modifica
+automaticamente le esclusioni. Dopo l’uso disinserisci e reincludi le zone
+quando opportuno: il comportamento e la durata dell’esclusione dipendono
+dalla centrale, non viene programmata una reinclusione automatica da HA.
+
+Gli interruttori usano la sessione già autenticata con il PIN configurato;
+non chiedono un secondo PIN a ogni cambio. Se la zona è attiva (bit AVS 3),
+ha dati mancanti o la centrale rifiuta il comando, l’operazione viene bloccata.
+Il client ricontrolla lo stato prima di scrivere e non ritenta le scritture.
+Uno stato richiesto non ancora confermato viene segnalato, senza aggiornamento
+ottimistico. Le esclusioni sono disponibili anche tramite `switch.turn_on`
+e `switch.turn_off` per plance e automazioni.
+
+Il vecchio sensore binario di esclusione rimane per compatibilità con le
+relative automazioni, è facoltativo e non è più diagnostico; per modificare
+l’esclusione usa il nuovo interruttore. Non sono stati eseguiti comandi reali
+sull’impianto durante lo sviluppo.
+
+### Aggiornare dalla 0.1.0 o 0.2.0
+
+Aggiorna tutti i file di `custom_components/nova_alarm` con quelli della 0.3.0
 e riavvia Home Assistant. La configurazione esistente viene conservata.
 Se usi HACS, l’aggiornamento sarà scaricabile solo dopo la pubblicazione della
 nuova versione nel repository; fino ad allora puoi copiare manualmente la
@@ -176,7 +217,7 @@ cartella. Apri le opzioni dell’integrazione e verifica la corrispondenza delle
 modalità prima di usare i comandi. Se mancano pulsanti, controlla i permessi
 concessi al tuo utente nell’app ufficiale.
 
-Non sono implementate esclusione delle zone, forzatura o comandi globali.
+Non sono implementati forzatura o comandi globali.
 
 Le credenziali e il PIN sono conservati nella configurazione dell'integrazione
 gestita da Home Assistant. Il client non li scrive nei log, negli attributi
@@ -210,6 +251,9 @@ La suite della 0.2.0 aggiunge test dei comandi, del PIN, dei permessi, delle
 corrispondenze, dei rifiuti, della serializzazione e dell’assenza di reinvio
 automatico. I servizi HA di inserimento e disinserimento sono esercitati nel
 test di ciclo completo con client simulato.
+La 0.3.0 aggiunge test dei controlli di esclusione/inclusione e della selezione
+delle modalità, comprese chiamate ai servizi switch in Home Assistant reale
+con risposte AVS simulate.
 Il codice sorgente del client è separato dall'adattamento a Home Assistant
 nel file `custom_components/nova_alarm/api.py`.
 

@@ -257,6 +257,33 @@ async def test_real_entry_setup_states_options_and_unload(hass):
             blocking=True,
         )
         client.async_set_sector_mode.assert_awaited_once_with("1", 4)
+        switches = [state for state in hass.states.async_all() if state.domain == "switch"]
+        assert len(switches) == 1
+        from homeassistant.helpers import entity_registry as er
+
+        registry_entry = er.async_get(hass).async_get(switches[0].entity_id)
+        assert registry_entry.entity_category is None
+        client.async_snapshot.return_value = snapshot(4)
+        await hass.services.async_call(
+            "switch",
+            "turn_on",
+            {"entity_id": switches[0].entity_id},
+            blocking=True,
+        )
+        await hass.async_block_till_done()
+        client.async_set_zone_excluded.assert_awaited_once_with("1", True)
+        assert hass.states.get(switches[0].entity_id).state == "on"
+        client.async_snapshot.return_value = snapshot(0)
+        client.async_set_zone_excluded.reset_mock()
+        await hass.services.async_call(
+            "switch",
+            "turn_off",
+            {"entity_id": switches[0].entity_id},
+            blocking=True,
+        )
+        await hass.async_block_till_done()
+        client.async_set_zone_excluded.assert_awaited_once_with("1", False)
+        assert hass.states.get(switches[0].entity_id).state == "off"
         coordinator = entry.runtime_data
         coordinator.async_set_updated_data(snapshot(0))
         await hass.async_block_till_done()
@@ -271,5 +298,13 @@ async def test_real_entry_setup_states_options_and_unload(hass):
         result = await hass.config_entries.options.async_configure(options["flow_id"], duplicate)
         assert result["type"] is FlowResultType.FORM
         assert result["errors"] == {"base": "duplicate_modes"}
+        with patch.object(hass.config_entries, "async_reload", new=AsyncMock()):
+            result = await hass.config_entries.options.async_configure(
+                options["flow_id"],
+                {**duplicate, "enabled_modes": ["ON"]},
+            )
+            assert result["type"] is FlowResultType.CREATE_ENTRY
+            assert entry.options["enabled_modes"] == ["ON"]
+            await hass.async_block_till_done()
         assert await hass.config_entries.async_unload(entry.entry_id)
         client.async_close.assert_awaited_once()

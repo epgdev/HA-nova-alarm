@@ -9,7 +9,7 @@ from .api import AvsClient, Plant
 from .const import CONF_DEVICE_ID, CONF_PIN, CONF_PLANT_ID, CONF_PLANT_NAME
 from .coordinator import AvsCoordinator
 
-PLATFORMS = [Platform.ALARM_CONTROL_PANEL, Platform.BINARY_SENSOR, Platform.SENSOR]
+PLATFORMS = [Platform.ALARM_CONTROL_PANEL, Platform.BINARY_SENSOR, Platform.SENSOR, Platform.SWITCH]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

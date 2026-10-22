@@ -50,18 +50,19 @@
     "step": {
       "init": {
         "title": "Updates and mode mapping",
-        "description": "Mapping determines both displayed states and commands sent. Assign a different HA state to each AVS mode and check mode names in the official app. Commands retain zone checks and never force arming.",
+        "description": "Select the arming modes to show: select only ON if that is all you use. OFF remains available. Mapping determines states and commands; use distinct HA states for selected modes. Hiding a mode does not change panel configuration.",
         "data": {
           "scan_interval": "Update interval (seconds)",
           "mode_on": "HA state for AVS ON",
           "mode_ho": "HA state for AVS HO",
           "mode_ar": "HA state for AVS AR",
-          "mode_pe": "HA state for AVS PE"
+          "mode_pe": "HA state for AVS PE",
+          "enabled_modes": "Visible arming modes"
         }
       }
     },
     "error": {
-      "duplicate_modes": "Assign a different HA state to each AVS mode."
+      "duplicate_modes": "Assign a different HA state to each selected mode."
     }
   },
   "selector": {
@@ -108,6 +109,11 @@
       "alarm_memory": {
         "name": "{zone} alarm memory"
       }
+    },
+    "switch": {
+      "zone_exclusion": {
+        "name": "{zone} exclusion"
+      }
     }
   },
   "exceptions": {
@@ -121,13 +127,16 @@
       "message": "This mode is not permitted for this sector or its state is unavailable."
     },
     "command_rejected": {
-      "message": "The panel refused the command or the mode is not permitted. Check open zones, faults and permissions in the official app. Arming was not forced."
+      "message": "The panel refused the command or the operation is not permitted. Check zones, faults and permissions in the official app."
     },
     "command_failed": {
       "message": "Command delivery is unconfirmed. Check the state in the official app before retrying. The command was not automatically retried."
     },
     "command_unconfirmed": {
-      "message": "Command accepted, but reading the state failed. Check the state in the official app before retrying."
+      "message": "Command accepted, but the requested state is not yet confirmed by the panel. Wait for an update and check the official app before retrying."
+    },
+    "zone_not_editable": {
+      "message": "The zone is active or its state is unavailable. Change exclusions while the system is disarmed."
     }
   }
 }

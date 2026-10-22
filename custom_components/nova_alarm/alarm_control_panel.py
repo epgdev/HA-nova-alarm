@@ -13,7 +13,14 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import AVS_MODES, CONF_PIN, DEFAULT_MODE_MAP, DOMAIN
+from .const import (
+    AVS_MODES,
+    CONF_ENABLED_MODES,
+    CONF_PIN,
+    DEFAULT_ENABLED_MODES,
+    DEFAULT_MODE_MAP,
+    DOMAIN,
+)
 from .coordinator import AvsCoordinator
 from .entity import AvsEntity
 
@@ -55,6 +62,10 @@ class AvsAlarm(AvsEntity, AlarmControlPanelEntity):
         mapped: dict[str, list[int]] = {}
         for mode, label in AVS_MODES.items():
             if mode == 4:
+                continue
+            if label not in self.coordinator.config_entry.options.get(
+                CONF_ENABLED_MODES, DEFAULT_ENABLED_MODES
+            ):
                 continue
             key = "mode_" + label.lower()
             state = self.coordinator.config_entry.options.get(key, DEFAULT_MODE_MAP[key])

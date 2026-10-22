@@ -40,7 +40,6 @@ DESCRIPTIONS = (
         bit=2,
         translation_key="excluded",
         device_class=BinarySensorDeviceClass.PROBLEM,
-        entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
     ),
     AvsBinaryDescription(

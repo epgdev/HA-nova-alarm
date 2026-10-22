@@ -23,10 +23,12 @@ from homeassistant.helpers.selector import (
 from .api import AccountError, AvsClient, AvsError, CannotConnect, InvalidAuth, Plant
 from .const import (
     CONF_DEVICE_ID,
+    CONF_ENABLED_MODES,
     CONF_PIN,
     CONF_PLANT_ID,
     CONF_PLANT_NAME,
     CONF_SCAN_INTERVAL,
+    DEFAULT_ENABLED_MODES,
     DEFAULT_MODE_MAP,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
@@ -207,12 +209,17 @@ class AvsOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(self, user_input: dict | None = None):
         errors = {}
         if user_input is not None:
-            modes = [user_input[key] for key in DEFAULT_MODE_MAP]
+            enabled = user_input.get(CONF_ENABLED_MODES, DEFAULT_ENABLED_MODES)
+            modes = [user_input["mode_" + mode.lower()] for mode in enabled]
             if len(set(modes)) == len(modes):
                 return self.async_create_entry(title="", data=user_input)
             errors["base"] = "duplicate_modes"
         current = user_input if user_input is not None else self.config_entry.options
         fields = {
+            vol.Required(
+                CONF_ENABLED_MODES,
+                default=current.get(CONF_ENABLED_MODES, DEFAULT_ENABLED_MODES),
+            ): SelectSelector(SelectSelectorConfig(options=DEFAULT_ENABLED_MODES, multiple=True)),
             vol.Required(
                 CONF_SCAN_INTERVAL,
                 default=current.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
