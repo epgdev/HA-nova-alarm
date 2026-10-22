@@ -16,10 +16,14 @@
       },
       "plant": {
         "title": "Impianto e PIN",
-        "description": "Accesso con il PIN della centrale. I comandi richiedono lo stesso PIN anche in Home Assistant. L’accesso può registrare un dispositivo nell’account AVS.",
+        "description": "Accesso con il PIN della centrale. Puoi scegliere se richiederlo anche per i comandi in Home Assistant. L’accesso può registrare un dispositivo nell’account AVS.",
         "data": {
           "plant_id": "Impianto",
-          "pin": "PIN della centrale"
+          "pin": "PIN della centrale",
+          "require_command_pin": "Richiedi il PIN per inserire e disinserire"
+        },
+        "data_description": {
+          "require_command_pin": "Se disattivato, chi può controllare il pannello in Home Assistant può inserire e disinserire senza digitare il PIN. Il PIN della centrale resta necessario per la connessione AVS."
         }
       },
       "reauth_confirm": {
@@ -64,7 +68,11 @@
           "mode_ho": "Stato HA per AVS HO",
           "mode_ar": "Stato HA per AVS AR",
           "mode_pe": "Stato HA per AVS PE",
-          "enabled_modes": "Modalità di inserimento visibili"
+          "enabled_modes": "Modalità di inserimento visibili",
+          "require_command_pin": "Richiedi il PIN per inserire e disinserire"
+        },
+        "data_description": {
+          "require_command_pin": "Se disattivato, chi può controllare il pannello in Home Assistant può inserire e disinserire senza digitare il PIN. Il PIN della centrale resta necessario per la connessione AVS."
         }
       }
     },

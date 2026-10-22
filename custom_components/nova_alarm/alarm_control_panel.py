@@ -17,6 +17,7 @@ from .const import (
     AVS_MODES,
     CONF_ENABLED_MODES,
     CONF_PIN,
+    CONF_REQUIRE_COMMAND_PIN,
     DEFAULT_ENABLED_MODES,
     DEFAULT_MODE_MAP,
     DOMAIN,
@@ -42,8 +43,6 @@ async def async_setup_entry(
 
 
 class AvsAlarm(AvsEntity, AlarmControlPanelEntity):
-    _attr_code_arm_required = True
-    _attr_code_format = CodeFormat.NUMBER
     _attr_translation_key = "sector"
 
     def __init__(self, coordinator: AvsCoordinator, sector_id: str) -> None:
@@ -57,6 +56,14 @@ class AvsAlarm(AvsEntity, AlarmControlPanelEntity):
     @property
     def available(self) -> bool:
         return super().available and self.sector_id in self.coordinator.data.sectors
+
+    @property
+    def code_arm_required(self) -> bool:
+        return self.coordinator.config_entry.options.get(CONF_REQUIRE_COMMAND_PIN, True)
+
+    @property
+    def code_format(self) -> CodeFormat | None:
+        return CodeFormat.NUMBER if self.code_arm_required else None
 
     def _mapped_modes(self) -> dict[str, list[int]]:
         mapped: dict[str, list[int]] = {}
@@ -129,7 +136,7 @@ class AvsAlarm(AvsEntity, AlarmControlPanelEntity):
 
     async def _async_command(self, mode: int, code: str | None) -> None:
         expected = self.coordinator.config_entry.data[CONF_PIN]
-        if (
+        if self.code_arm_required and (
             not isinstance(code, str)
             or not code
             or not hmac.compare_digest(code.encode("utf-8"), expected.encode("utf-8"))

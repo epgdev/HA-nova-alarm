@@ -180,7 +180,8 @@ async def test_bad_credentials_start_reauthentication(hass):
         await coordinator._async_update_data()
 
 
-async def test_flow_through_manager(hass):
+@pytest.mark.parametrize("require_pin", [True, False])
+async def test_flow_through_manager(hass, require_pin):
     with (
         patch("custom_components.nova_alarm.config_flow.AvsClient") as cls,
         patch(
@@ -210,10 +211,12 @@ async def test_flow_through_manager(hass):
                 {
                     "plant_id": "test-plant",
                     "pin": "01234",
+                    "require_command_pin": require_pin,
                 },
             )
             assert result["type"] is FlowResultType.CREATE_ENTRY
             assert result["data"]["pin"] == "01234"
+            assert result["result"].options["require_command_pin"] is require_pin
             assert result["data"]["device_id"] == "1234567890abcdef"
             client.async_close.assert_awaited_once()
             await hass.async_block_till_done()
@@ -301,11 +304,34 @@ async def test_real_entry_setup_states_options_and_unload(hass):
         with patch.object(hass.config_entries, "async_reload", new=AsyncMock()):
             result = await hass.config_entries.options.async_configure(
                 options["flow_id"],
-                {**duplicate, "enabled_modes": ["ON"]},
+                {**duplicate, "enabled_modes": ["ON"], "require_command_pin": False},
             )
             assert result["type"] is FlowResultType.CREATE_ENTRY
             assert entry.options["enabled_modes"] == ["ON"]
+            assert entry.options["require_command_pin"] is False
             await hass.async_block_till_done()
+        coordinator.async_set_updated_data(snapshot(0))
+        await hass.async_block_till_done()
+        # The actual registered services accept no code when the option is disabled.
+        client.async_set_sector_mode.reset_mock()
+        await hass.services.async_call(
+            "alarm_control_panel",
+            "alarm_arm_home",
+            {"entity_id": alarms[0].entity_id},
+            blocking=True,
+        )
+        client.async_set_sector_mode.assert_awaited_once_with("1", 0)
+        await hass.services.async_call(
+            "alarm_control_panel",
+            "alarm_disarm",
+            {"entity_id": alarms[0].entity_id},
+            blocking=True,
+        )
+        assert client.async_set_sector_mode.call_args.args == ("1", 4)
+        await hass.async_block_till_done()
+        alarm_state = hass.states.get(alarms[0].entity_id)
+        assert alarm_state.attributes["code_format"] is None
+        assert alarm_state.attributes["code_arm_required"] is False
         assert await hass.config_entries.async_unload(entry.entry_id)
         client.async_close.assert_awaited_once()
 
@@ -347,3 +373,33 @@ async def test_command_log_never_includes_error_message(hass, caplog):
     assert "secret-password" not in caplog.text
     assert "01234" not in caplog.text
     client.async_set_sector_mode.assert_awaited_once()
+
+
+@pytest.mark.parametrize(
+    "method,mode",
+    [
+        ("async_alarm_arm_away", 0),
+        ("async_alarm_arm_home", 1),
+        ("async_alarm_arm_custom_bypass", 2),
+        ("async_alarm_arm_night", 3),
+        ("async_alarm_disarm", 4),
+    ],
+)
+async def test_optional_command_pin_and_reenable(hass, method, mode):
+    client = AsyncMock()
+    client.async_snapshot.return_value = snapshot()
+    coordinator = AvsCoordinator(hass, make_entry({"require_command_pin": False}), client)
+    coordinator.async_set_updated_data(snapshot())
+    alarm = AvsAlarm(coordinator, "1")
+    assert alarm.code_format is None
+    assert alarm.code_arm_required is False
+    await getattr(alarm, method)()
+    client.async_set_sector_mode.assert_awaited_once_with("1", mode)
+    coordinator.config_entry = make_entry({"require_command_pin": True})
+    assert alarm.code_format == CodeFormat.NUMBER
+    assert alarm.code_arm_required is True
+    with pytest.raises(ServiceValidationError):
+        await getattr(alarm, method)()
+    assert client.async_set_sector_mode.await_count == 1
+    await getattr(alarm, method)("01234")
+    assert client.async_set_sector_mode.await_count == 2

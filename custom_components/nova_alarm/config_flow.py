@@ -28,6 +28,7 @@ from .const import (
     CONF_PIN,
     CONF_PLANT_ID,
     CONF_PLANT_NAME,
+    CONF_REQUIRE_COMMAND_PIN,
     CONF_SCAN_INTERVAL,
     DEFAULT_ENABLED_MODES,
     DEFAULT_MODE_MAP,
@@ -152,6 +153,9 @@ class AvsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 else:
                     return self.async_create_entry(
                         title=plant.name or "AVS",
+                        options={
+                            CONF_REQUIRE_COMMAND_PIN: user_input.get(CONF_REQUIRE_COMMAND_PIN, True)
+                        },
                         data={
                             **self._credentials,
                             CONF_PIN: pin,
@@ -175,6 +179,10 @@ class AvsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         SelectSelectorConfig(options=choices)
                     ),
                     vol.Required(CONF_PIN): SECRET,
+                    vol.Required(
+                        CONF_REQUIRE_COMMAND_PIN,
+                        default=(user_input or {}).get(CONF_REQUIRE_COMMAND_PIN, True),
+                    ): bool,
                 }
             ),
         )
@@ -237,6 +245,10 @@ class AvsOptionsFlow(config_entries.OptionsFlow):
             errors["base"] = "duplicate_modes"
         current = user_input if user_input is not None else self.config_entry.options
         fields = {
+            vol.Required(
+                CONF_REQUIRE_COMMAND_PIN,
+                default=current.get(CONF_REQUIRE_COMMAND_PIN, True),
+            ): bool,
             vol.Required(
                 CONF_ENABLED_MODES,
                 default=current.get(CONF_ENABLED_MODES, DEFAULT_ENABLED_MODES),

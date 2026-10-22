@@ -1,4 +1,4 @@
-# Nova Alarm per Home Assistant — 0.3.2
+# Nova Alarm per Home Assistant — 0.3.3
 
 Prima versione sperimentale di una **custom integration** per il cloud AVS.
 Si configura da Impostazioni → Dispositivi e servizi. Non è un add-on da
@@ -138,8 +138,9 @@ si possono rinominare le entità dall'interfaccia di Home Assistant.
 ## Comandi da Home Assistant
 
 Dalla versione **0.2.0** il pannello del settore espone inserimento e
-disinserimento. Inserisci il **PIN della centrale già configurato
+disinserimento. Per default inserisci il **PIN della centrale già configurato
 nell’integrazione** per ogni operazione, anche nelle chiamate ai servizi HA.
+Dalla 0.3.3 puoi disattivare questa richiesta locale nelle opzioni (vedi sotto).
 Conserva gli zeri iniziali: nelle automazioni il codice deve essere una stringa,
 ad esempio `code: "01234"` (esempio fittizio).
 
@@ -299,3 +300,22 @@ come `%2C`: questa differenza è stata individuata dopo una risposta
 la conferma del funzionamento sull’impianto rimane da effettuare.
 Aggiorna da HACS e riavvia Home Assistant. Non vengono inviati comandi durante
 l’aggiornamento e non vengono introdotti reinvii automatici o forzature.
+
+## PIN dei comandi facoltativo (0.3.3)
+
+Durante la prima configurazione o nelle opzioni dell’integrazione trovi
+**Richiedi il PIN per inserire e disinserire**, attivo per default anche per
+le installazioni esistenti. Puoi disattivarlo senza riconfigurare l’account.
+
+Quando è disattivato, il pannello comunica a Home Assistant che non serve
+un codice: le schede che rispettano questi attributi, compresa Mushroom,
+non devono mostrarne la richiesta. Anche i servizi di inserimento e
+disinserimento funzionano senza `code`. Chi ha accesso ai controlli del
+pannello in HA può quindi usare entrambe le operazioni senza un secondo PIN.
+Riattivando l’opzione tornano la richiesta e la verifica del codice.
+
+Il PIN della centrale resta obbligatorio nella configurazione: autentica
+la sessione AVS e non viene eliminato o esposto nelle entità. L’opzione
+riguarda solo il controllo locale dei comandi in HA, non il protocollo AVS,
+i permessi, le esclusioni o i controlli sulle zone. L’aggiornamento e la
+modifica dell’opzione non inviano comandi all’impianto.

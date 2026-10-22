@@ -16,10 +16,14 @@
       },
       "plant": {
         "title": "Installation and PIN",
-        "description": "Sign in with the central panel PIN. Commands also require this PIN in Home Assistant. Signing in can register a device in the AVS account.",
+        "description": "Sign in with the central panel PIN. Choose whether to require it for commands in Home Assistant too. Signing in can register a device in the AVS account.",
         "data": {
           "plant_id": "Installation",
-          "pin": "Central panel PIN"
+          "pin": "Central panel PIN",
+          "require_command_pin": "Require PIN to arm and disarm"
+        },
+        "data_description": {
+          "require_command_pin": "When disabled, anyone allowed to control this panel in Home Assistant can arm and disarm without entering a PIN. The panel PIN is still required for the AVS connection."
         }
       },
       "reauth_confirm": {
@@ -64,7 +68,11 @@
           "mode_ho": "HA state for AVS HO",
           "mode_ar": "HA state for AVS AR",
           "mode_pe": "HA state for AVS PE",
-          "enabled_modes": "Visible arming modes"
+          "enabled_modes": "Visible arming modes",
+          "require_command_pin": "Require PIN to arm and disarm"
+        },
+        "data_description": {
+          "require_command_pin": "When disabled, anyone allowed to control this panel in Home Assistant can arm and disarm without entering a PIN. The panel PIN is still required for the AVS connection."
         }
       }
     },
