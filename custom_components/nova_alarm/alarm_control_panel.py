@@ -1,16 +1,19 @@
-"""Read-only alarm state. No alarm commands are implemented."""
+"""Sector states and PIN-protected AVS commands."""
+
+import hmac
 
 from homeassistant.components.alarm_control_panel import (
     AlarmControlPanelEntity,
     AlarmControlPanelEntityFeature,
     AlarmControlPanelState,
+    CodeFormat,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import AVS_MODES, DEFAULT_MODE_MAP, DOMAIN
+from .const import AVS_MODES, CONF_PIN, DEFAULT_MODE_MAP, DOMAIN
 from .coordinator import AvsCoordinator
 from .entity import AvsEntity
 
@@ -32,8 +35,8 @@ async def async_setup_entry(
 
 
 class AvsAlarm(AvsEntity, AlarmControlPanelEntity):
-    _attr_supported_features = AlarmControlPanelEntityFeature(0)
-    _attr_code_arm_required = False
+    _attr_code_arm_required = True
+    _attr_code_format = CodeFormat.NUMBER
     _attr_translation_key = "sector"
 
     def __init__(self, coordinator: AvsCoordinator, sector_id: str) -> None:
@@ -47,6 +50,35 @@ class AvsAlarm(AvsEntity, AlarmControlPanelEntity):
     @property
     def available(self) -> bool:
         return super().available and self.sector_id in self.coordinator.data.sectors
+
+    def _mapped_modes(self) -> dict[str, list[int]]:
+        mapped: dict[str, list[int]] = {}
+        for mode, label in AVS_MODES.items():
+            if mode == 4:
+                continue
+            key = "mode_" + label.lower()
+            state = self.coordinator.config_entry.options.get(key, DEFAULT_MODE_MAP[key])
+            mapped.setdefault(state, []).append(mode)
+        return mapped
+
+    @property
+    def supported_features(self) -> AlarmControlPanelEntityFeature:
+        features = AlarmControlPanelEntityFeature(0)
+        sector = self.coordinator.data.sectors.get(self.sector_id)
+        if sector is None or self.sector_id == "0":
+            return features
+        for state, modes in self._mapped_modes().items():
+            if len(modes) == 1 and modes[0] in sector.allowed_modes:
+                feature = {
+                    "armed_away": AlarmControlPanelEntityFeature.ARM_AWAY,
+                    "armed_home": AlarmControlPanelEntityFeature.ARM_HOME,
+                    "armed_night": AlarmControlPanelEntityFeature.ARM_NIGHT,
+                    "armed_custom_bypass": AlarmControlPanelEntityFeature.ARM_CUSTOM_BYPASS,
+                    "armed_vacation": AlarmControlPanelEntityFeature.ARM_VACATION,
+                }.get(state)
+                if feature is not None:
+                    features |= feature
+        return features
 
     @property
     def alarm_state(self) -> AlarmControlPanelState | None:
@@ -70,8 +102,46 @@ class AvsAlarm(AvsEntity, AlarmControlPanelEntity):
         return {
             "avs_mode": AVS_MODES.get(sector.mode) if sector else None,
             "avs_flags": sector.flags if sector else None,
-            "read_only": True,
+            "read_only": False,
         }
 
     async def async_alarm_disarm(self, code: str | None = None) -> None:
-        raise ServiceValidationError(translation_domain=DOMAIN, translation_key="read_only")
+        await self._async_command(4, code)
+
+    async def _async_arm(self, state: str, code: str | None) -> None:
+        modes = self._mapped_modes().get(state, [])
+        if len(modes) != 1:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="ambiguous_mode"
+            )
+        await self._async_command(modes[0], code)
+
+    async def _async_command(self, mode: int, code: str | None) -> None:
+        expected = self.coordinator.config_entry.data[CONF_PIN]
+        if (
+            not isinstance(code, str)
+            or not code
+            or not hmac.compare_digest(code.encode("utf-8"), expected.encode("utf-8"))
+        ):
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="invalid_code")
+        sector = self.coordinator.data.sectors.get(self.sector_id)
+        if not self.available or sector is None or mode not in sector.allowed_modes:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="mode_not_allowed"
+            )
+        await self.coordinator.async_set_sector_mode(self.sector_id, mode)
+
+    async def async_alarm_arm_away(self, code: str | None = None) -> None:
+        await self._async_arm("armed_away", code)
+
+    async def async_alarm_arm_home(self, code: str | None = None) -> None:
+        await self._async_arm("armed_home", code)
+
+    async def async_alarm_arm_night(self, code: str | None = None) -> None:
+        await self._async_arm("armed_night", code)
+
+    async def async_alarm_arm_custom_bypass(self, code: str | None = None) -> None:
+        await self._async_arm("armed_custom_bypass", code)
+
+    async def async_alarm_arm_vacation(self, code: str | None = None) -> None:
+        await self._async_arm("armed_vacation", code)

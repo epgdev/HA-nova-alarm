@@ -1,4 +1,4 @@
-# Nova Alarm per Home Assistant — 0.1.0
+# Nova Alarm per Home Assistant — 0.2.0
 
 Prima versione sperimentale di una **custom integration** per il cloud AVS.
 Si configura da Impostazioni → Dispositivi e servizi. Non è un add-on da
@@ -27,7 +27,8 @@ con dominio `mio_antifurto` deve essere rimossa se era stata installata.
 
 - Accesso con username, password e PIN dell'app Mio Antifurto.
 - Scelta dell'impianto associato all'account.
-- Un `alarm_control_panel` in sola lettura per settore.
+- Un `alarm_control_panel` per settore, con inserimento e disinserimento protetti da PIN.
+- Comandi ON, HO, AR, PE, OFF con controlli sulle zone e permessi restituiti dalla centrale.
 - Un sensore con la modalità originale AVS: ON, HO, AR, PE, OFF.
 - Sensori binari per apertura, manomissione, esclusione, batteria scarica,
   guasto, antimascheramento e memoria allarme di ciascuna zona.
@@ -54,6 +55,10 @@ deve ancora essere verificata.
 5. Cerca **Nova Alarm**, inserisci username/password, poi seleziona
    l'impianto e inserisci il PIN della centrale. Gli zeri iniziali del PIN
    vengono conservati.
+
+L’integrazione include l’icona verde Mio Antifurto nella cartella `brand/`.
+Home Assistant 2026.3 o successivo la carica localmente; dopo l’aggiornamento
+riavvia Home Assistant e, se necessario, ricarica la pagina per aggiornare l’icona.
 
 Non aggiungere righe a `configuration.yaml`. Il repository è predisposto per essere aggiunto a HACS come repository
 personalizzato di tipo Integrazione.
@@ -128,10 +133,50 @@ automatico e l'uso continuativo del polling devono ancora essere verificati
 su questo impianto. Se i nomi non sono disponibili vengono usati nomi generici;
 si possono rinominare le entità dall'interfaccia di Home Assistant.
 
-Non sono implementati inserimento, disinserimento o esclusione delle zone.
-Home Assistant può mostrare un'azione di disinserimento anche per un pannello
-senza funzioni supportate: se invocata, questa versione restituisce un errore
-esplicito e non invia richieste di comando alla centrale.
+## Comandi da Home Assistant
+
+Dalla versione **0.2.0** il pannello del settore espone inserimento e
+disinserimento. Inserisci il **PIN della centrale già configurato
+nell’integrazione** per ogni operazione, anche nelle chiamate ai servizi HA.
+Conserva gli zeri iniziali: nelle automazioni il codice deve essere una stringa,
+ad esempio `code: "01234"` (esempio fittizio).
+
+La corrispondenza nelle opzioni ora determina **sia gli stati sia i comandi**:
+per default Fuori casa → ON, In casa → HO, Personalizzato → AR, Notte → PE;
+Disinserisci invia OFF. Verifica nell’app ufficiale quali zone sono associate
+alle modalità del tuo impianto. Ogni modalità AVS deve avere uno stato HA
+distinto; vecchie corrispondenze duplicate rendono il relativo comando ambiguo
+e quindi indisponibile finché non vengono corrette nelle opzioni.
+
+I pulsanti di inserimento compaiono solo per le modalità esplicitamente
+consentite dalla risposta AVS (`on`, `ho`, `ar`, `pe` uguale a 1). Il client
+rilegge i permessi prima di ogni comando e controlla anche `off` per il
+disinserimento. Permessi mancanti non vengono interpretati come consenso.
+Il settore aggregato con ID 0 non è comandabile in questa versione.
+
+Il comando mantiene `check=1` e `checkzone=1`, come il comando singolo dell’app:
+**non forza inserimenti, non esclude zone e non ritenta disabilitando i controlli**.
+Se la centrale rifiuta l’operazione, controlla zone aperte e anomalie nell’app
+ufficiale. Dopo la richiesta viene riletto lo stato effettivo, senza mostrare
+ottimisticamente la modalità richiesta. Durante eventuali ritardi della
+centrale può rimanere lo stato precedente fino al polling successivo.
+
+Un timeout o una risposta non valida non provocano il reinvio del comando:
+l’esito può essere incerto. Controlla lo stato nell’app prima di riprovare.
+I comandi sono stati ricostruiti dall’APK e verificati con risposte simulate;
+**il collaudo su un impianto reale resta da effettuare**.
+
+### Aggiornare dalla 0.1.0
+
+Aggiorna tutti i file di `custom_components/nova_alarm` con quelli della 0.2.0
+e riavvia Home Assistant. La configurazione esistente viene conservata.
+Se usi HACS, l’aggiornamento sarà scaricabile solo dopo la pubblicazione della
+nuova versione nel repository; fino ad allora puoi copiare manualmente la
+cartella. Apri le opzioni dell’integrazione e verifica la corrispondenza delle
+modalità prima di usare i comandi. Se mancano pulsanti, controlla i permessi
+concessi al tuo utente nell’app ufficiale.
+
+Non sono implementate esclusione delle zone, forzatura o comandi globali.
 
 Le credenziali e il PIN sono conservati nella configurazione dell'integrazione
 gestita da Home Assistant. Il client non li scrive nei log, negli attributi
@@ -157,10 +202,14 @@ python3 -m venv .venv
 I test usano risposte simulate; non si collegano ad account AVS. Coprono il
 protocollo, la conservazione degli zeri nel PIN, il rinnovo limitato delle
 sessioni, errori, dati mancanti, stati HA e configurazione da interfaccia.
-Esito iniziale: **18 test superati** su Home Assistant 2026.10.2/Python 3.14.8;
+Esito iniziale della 0.1.0: **18 test superati** su Home Assistant 2026.10.2/Python 3.14.8;
 controlli Ruff e formattazione superati. Il test di ciclo completo carica
 le piattaforme reali di HA, registra le entità, applica aggiornamenti simulati,
 apre le opzioni e scarica l'integrazione.
+La suite della 0.2.0 aggiunge test dei comandi, del PIN, dei permessi, delle
+corrispondenze, dei rifiuti, della serializzazione e dell’assenza di reinvio
+automatico. I servizi HA di inserimento e disinserimento sono esercitati nel
+test di ciclo completo con client simulato.
 Il codice sorgente del client è separato dall'adattamento a Home Assistant
 nel file `custom_components/nova_alarm/api.py`.
 

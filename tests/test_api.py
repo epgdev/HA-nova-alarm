@@ -11,6 +11,7 @@ from custom_components.nova_alarm.api import (
     AccountError,
     AvsClient,
     CannotConnect,
+    CommandRejected,
     InvalidAuth,
     Plant,
     ProtocolError,
@@ -143,7 +144,141 @@ async def test_parallel_updates_are_serialized():
     assert maximum == 1
 
 
-async def test_client_does_not_allow_commands():
+async def test_client_does_not_allow_zone_bypass():
     client = make_client()
     with pytest.raises(ProtocolError):
-        await client._post("/avs/set_sectors", {"mode": "4"})
+        await client._post("/avs/set_zones", {"mode": "4"})
+
+
+@pytest.mark.parametrize("mode", range(5))
+async def test_sector_command_wire_format(mode):
+    client = make_client()
+    client._token, client._auth = "session", "auth"
+    response = MagicMock()
+    response.status = 200
+
+    async def chunks(size):
+        yield b'<AVS><SET_SECTORS status="0"/></AVS>'
+
+    response.content.iter_chunked = chunks
+    context = MagicMock()
+    context.__aenter__ = AsyncMock(return_value=response)
+    client._session.post.return_value = context
+    client._snapshot = AsyncMock(
+        return_value=parse_snapshot(
+            xml(
+                '<AVS><GET_SECTORS><ITEM id="1" type="4" on="1" ho="1" ar="1" pe="1" off="1"/></GET_SECTORS></AVS>'
+            ),
+            xml("<AVS><GET_ZONES/></AVS>"),
+        )
+    )
+    await client.async_set_sector_mode("1", mode)
+    call = client._session.post.call_args
+    assert call.args == ("https://fe1.myavsalarm.com:443/avs/set_sectors",)
+    assert parse_qs(call.kwargs["data"].decode()) == {
+        "auth": ["auth"],
+        "session": ["session"],
+        "sectors": [f"1,{mode}"],
+        "check": ["1"],
+        "checkzone": ["1"],
+    }
+    assert call.kwargs["allow_redirects"] is False
+    client._session.post.assert_called_once()
+
+
+def test_sector_permissions_are_explicit_and_preserved():
+    data = parse_snapshot(
+        xml(
+            '<AVS><GET_SECTORS><ITEM id="1" type="4" on="1" ho="0" ar="2" pe="bad" off="1"/></GET_SECTORS></AVS>'
+        ),
+        xml("<AVS><GET_ZONES/></AVS>"),
+    )
+    assert data.sectors["1"].allowed_modes == (0, 4)
+
+
+@pytest.mark.parametrize("sector,mode", [("1,2", 0), ("0", 4), ("-1", 0), ("1", 5), ("1", True)])
+async def test_invalid_command_never_connects(sector, mode):
+    client = make_client()
+    client._login = AsyncMock()
+    with pytest.raises(CommandRejected):
+        await client.async_set_sector_mode(sector, mode)
+    client._login.assert_not_awaited()
+
+
+@pytest.mark.parametrize("sector", ["1", "2"])
+async def test_command_checks_fresh_sector_permissions(sector):
+    client = make_client()
+    client._snapshot_with_renewal = AsyncMock(
+        return_value=parse_snapshot(
+            xml('<AVS><GET_SECTORS><ITEM id="1" type="4" off="1"/></GET_SECTORS></AVS>'),
+            xml("<AVS><GET_ZONES/></AVS>"),
+        )
+    )
+    client._post = AsyncMock()
+    with pytest.raises(CommandRejected):
+        await client.async_set_sector_mode(sector, 0)
+    client._post.assert_not_awaited()
+
+
+@pytest.mark.parametrize("status", ["1", "2", "3", "-1", "bad", None])
+async def test_command_rejection_never_forces_or_retries(status):
+    client = make_client()
+    client._snapshot_with_renewal = AsyncMock(
+        return_value=parse_snapshot(
+            xml('<AVS><GET_SECTORS><ITEM id="1" type="4" on="1"/></GET_SECTORS></AVS>'),
+            xml("<AVS><GET_ZONES/></AVS>"),
+        )
+    )
+    element = ET.Element("SET_SECTORS", {"errstr": "secret", "idzone": "1"})
+    if status is not None:
+        element.set("status", status)
+    client._post = AsyncMock(return_value=element)
+    with pytest.raises(CommandRejected) as caught:
+        await client.async_set_sector_mode("1", 0)
+    assert "secret" not in str(caught.value)
+    client._post.assert_awaited_once()
+    assert client._post.call_args.args[1]["checkzone"] == "1"
+
+
+@pytest.mark.parametrize(
+    "error", [CannotConnect("timeout"), SessionExpired("expired"), ProtocolError("bad XML")]
+)
+async def test_uncertain_command_is_not_replayed(error):
+    client = make_client()
+    client._snapshot_with_renewal = AsyncMock(
+        return_value=parse_snapshot(
+            xml('<AVS><GET_SECTORS><ITEM id="1" type="4" off="1"/></GET_SECTORS></AVS>'),
+            xml("<AVS><GET_ZONES/></AVS>"),
+        )
+    )
+    client._post = AsyncMock(side_effect=error)
+    with pytest.raises(CannotConnect):
+        await client.async_set_sector_mode("1", 4)
+    client._post.assert_awaited_once()
+
+
+async def test_poll_and_command_share_one_lock():
+    client = make_client()
+    client._token = "session"
+    data = parse_snapshot(
+        xml('<AVS><GET_SECTORS><ITEM id="1" type="4" off="1"/></GET_SECTORS></AVS>'),
+        xml("<AVS><GET_ZONES/></AVS>"),
+    )
+    order = []
+
+    async def snapshot():
+        order.append("read-start")
+        await asyncio.sleep(0)
+        order.append("read-end")
+        return data
+
+    async def post(*args):
+        order.append("write-start")
+        await asyncio.sleep(0)
+        order.append("write-end")
+        return xml('<AVS><SET_SECTORS status="0"/></AVS>')
+
+    client._snapshot = snapshot
+    client._post = post
+    await asyncio.gather(client.async_set_sector_mode("1", 4), client.async_snapshot())
+    assert order == ["read-start", "read-end", "write-start", "write-end", "read-start", "read-end"]

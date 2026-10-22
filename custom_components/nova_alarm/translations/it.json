@@ -16,7 +16,7 @@
       },
       "plant": {
         "title": "Impianto e PIN",
-        "description": "Questa versione legge soltanto gli stati. L’accesso può registrare un dispositivo nell’account AVS.",
+        "description": "Accesso con il PIN della centrale. I comandi richiedono lo stesso PIN anche in Home Assistant. L’accesso può registrare un dispositivo nell’account AVS.",
         "data": {
           "plant_id": "Impianto",
           "pin": "PIN della centrale"
@@ -50,7 +50,7 @@
     "step": {
       "init": {
         "title": "Aggiornamenti e modalità",
-        "description": "Queste opzioni cambiano soltanto lo stato visualizzato in Home Assistant. Non inviano comandi all’allarme. Le modalità possono avere nomi personalizzati dall’installatore.",
+        "description": "La corrispondenza determina sia gli stati visualizzati sia i comandi inviati. Assegna uno stato HA diverso a ogni modalità AVS e verifica i nomi nell’app ufficiale. I comandi mantengono i controlli sulle zone, senza forzare l’inserimento.",
         "data": {
           "scan_interval": "Intervallo aggiornamento (secondi)",
           "mode_on": "Stato HA per AVS ON",
@@ -59,6 +59,9 @@
           "mode_pe": "Stato HA per AVS PE"
         }
       }
+    },
+    "error": {
+      "duplicate_modes": "Assegna uno stato HA diverso a ogni modalità AVS."
     }
   },
   "selector": {
@@ -108,8 +111,23 @@
     }
   },
   "exceptions": {
-    "read_only": {
-      "message": "Questa versione di Nova Alarm legge soltanto gli stati. I comandi all’allarme non sono disponibili."
+    "invalid_code": {
+      "message": "Inserisci il PIN della centrale configurato nell’integrazione, conservando gli zeri iniziali."
+    },
+    "ambiguous_mode": {
+      "message": "Modalità assente o ambigua. Configura una corrispondenza univoca nelle opzioni dell’integrazione."
+    },
+    "mode_not_allowed": {
+      "message": "Questa modalità non è consentita per il settore o lo stato non è disponibile."
+    },
+    "command_rejected": {
+      "message": "La centrale ha rifiutato il comando o la modalità non è consentita. Controlla zone aperte, anomalie e permessi nell’app ufficiale. Non è stato forzato l’inserimento."
+    },
+    "command_failed": {
+      "message": "Invio del comando non confermato. Controlla lo stato nell’app ufficiale prima di riprovare. Il comando non è stato ritentato automaticamente."
+    },
+    "command_unconfirmed": {
+      "message": "Comando accettato, ma rilettura dello stato fallita. Controlla lo stato nell’app ufficiale prima di riprovare."
     }
   }
 }

@@ -4,20 +4,36 @@ from types import MappingProxyType
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from homeassistant.components.alarm_control_panel import AlarmControlPanelState
+from homeassistant.components.alarm_control_panel import (
+    AlarmControlPanelEntityFeature,
+    AlarmControlPanelState,
+    CodeFormat,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.data_entry_flow import FlowResultType
-from homeassistant.exceptions import ConfigEntryAuthFailed, ServiceValidationError
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    HomeAssistantError,
+    ServiceValidationError,
+)
 
 from custom_components.nova_alarm.alarm_control_panel import AvsAlarm
-from custom_components.nova_alarm.api import InvalidAuth, Plant, Sector, Snapshot, Zone
+from custom_components.nova_alarm.api import (
+    CannotConnect,
+    CommandRejected,
+    InvalidAuth,
+    Plant,
+    Sector,
+    Snapshot,
+    Zone,
+)
 from custom_components.nova_alarm.binary_sensor import DESCRIPTIONS, AvsZone
-from custom_components.nova_alarm.const import DOMAIN
+from custom_components.nova_alarm.const import DEFAULT_MODE_MAP, DOMAIN
 from custom_components.nova_alarm.coordinator import AvsCoordinator
 
 
-def make_entry():
+def make_entry(options=None):
     return ConfigEntry(
         version=1,
         minor_version=1,
@@ -32,7 +48,7 @@ def make_entry():
             "pin": "01234",
             "device_id": "1234567890abcdef",
         },
-        options={},
+        options=options or {},
         unique_id="test-plant",
         discovery_keys=MappingProxyType({}),
         subentries_data=[],
@@ -41,7 +57,8 @@ def make_entry():
 
 def snapshot(flags=1):
     return Snapshot(
-        {"1": Sector("1", 16777236, "Casa")}, {"1": Zone("1", flags, "Finestra cucina")}
+        {"1": Sector("1", 16777236, "Casa", (0, 1, 2, 3, 4))},
+        {"1": Zone("1", flags, "Finestra cucina")},
     )
 
 
@@ -61,13 +78,98 @@ async def test_entities_and_unknown_data(hass):
     assert not alarm.available and not zone.available
 
 
-async def test_no_disarming_command(hass):
+@pytest.mark.parametrize("code", [None, "", "1234", "wrong", "０１２３４"])
+async def test_commands_require_exact_pin(hass, code):
     coordinator = AvsCoordinator(hass, make_entry(), AsyncMock())
     coordinator.async_set_updated_data(snapshot())
     alarm = AvsAlarm(coordinator, "1")
+    for command in (alarm.async_alarm_disarm, alarm.async_alarm_arm_away):
+        with pytest.raises(ServiceValidationError):
+            await command(code)
+    coordinator.client.async_set_sector_mode.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "method,mode",
+    [
+        ("async_alarm_arm_away", 0),
+        ("async_alarm_arm_home", 1),
+        ("async_alarm_arm_custom_bypass", 2),
+        ("async_alarm_arm_night", 3),
+        ("async_alarm_disarm", 4),
+    ],
+)
+async def test_commands_refresh_actual_state(hass, method, mode):
+    client = AsyncMock()
+    client.async_snapshot.return_value = snapshot()
+    coordinator = AvsCoordinator(hass, make_entry(), client)
+    coordinator.async_set_updated_data(snapshot())
+    alarm = AvsAlarm(coordinator, "1")
+    assert alarm.code_format == CodeFormat.NUMBER
+    assert alarm.code_arm_required
+    await getattr(alarm, method)("01234")
+    client.async_set_sector_mode.assert_awaited_once_with("1", mode)
+    client.async_snapshot.assert_awaited_once()
+    # Even if the panel takes time to arm, publish only the observed state.
+    assert alarm.alarm_state == AlarmControlPanelState.DISARMED
+
+
+async def test_mapping_and_ambiguous_legacy_options(hass):
+    entry = make_entry({"mode_on": "armed_vacation"})
+    client = AsyncMock()
+    client.async_snapshot.return_value = snapshot()
+    coordinator = AvsCoordinator(hass, entry, client)
+    coordinator.async_set_updated_data(snapshot())
+    alarm = AvsAlarm(coordinator, "1")
+    assert alarm.supported_features & AlarmControlPanelEntityFeature.ARM_VACATION
+    assert not alarm.supported_features & AlarmControlPanelEntityFeature.ARM_AWAY
+    await alarm.async_alarm_arm_vacation("01234")
+    client.async_set_sector_mode.assert_awaited_once_with("1", 0)
+    coordinator.config_entry = make_entry({"mode_on": "armed_home"})
+    assert not alarm.supported_features & AlarmControlPanelEntityFeature.ARM_HOME
+    with pytest.raises(ServiceValidationError):
+        await alarm.async_alarm_arm_home("01234")
+    assert client.async_set_sector_mode.await_count == 1
+
+
+async def test_missing_permissions_and_unavailable_block_commands(hass):
+    client = AsyncMock()
+    coordinator = AvsCoordinator(hass, make_entry(), client)
+    coordinator.async_set_updated_data(Snapshot({"1": Sector("1", 4)}, {}))
+    alarm = AvsAlarm(coordinator, "1")
+    assert alarm.supported_features == 0
     with pytest.raises(ServiceValidationError):
         await alarm.async_alarm_disarm("01234")
-    coordinator.client.async_snapshot.assert_not_awaited()
+    coordinator.async_set_updated_data(snapshot())
+    coordinator.async_set_update_error(CannotConnect("offline"))
+    with pytest.raises(ServiceValidationError):
+        await alarm.async_alarm_arm_away("01234")
+    client.async_set_sector_mode.assert_not_awaited()
+
+
+@pytest.mark.parametrize("error", [CommandRejected("secret"), CannotConnect("secret")])
+async def test_command_errors_are_redacted_and_state_refreshed(hass, error):
+    client = AsyncMock()
+    client.async_set_sector_mode.side_effect = error
+    client.async_snapshot.return_value = snapshot()
+    coordinator = AvsCoordinator(hass, make_entry(), client)
+    coordinator.async_set_updated_data(snapshot())
+    with pytest.raises(HomeAssistantError) as caught:
+        await AvsAlarm(coordinator, "1").async_alarm_disarm("01234")
+    assert "secret" not in str(caught.value)
+    client.async_set_sector_mode.assert_awaited_once()
+    client.async_snapshot.assert_awaited_once()
+
+
+async def test_accepted_command_with_failed_refresh_is_unconfirmed(hass):
+    client = AsyncMock()
+    client.async_snapshot.side_effect = CannotConnect("offline")
+    coordinator = AvsCoordinator(hass, make_entry(), client)
+    coordinator.async_set_updated_data(snapshot())
+    with pytest.raises(HomeAssistantError) as caught:
+        await AvsAlarm(coordinator, "1").async_alarm_disarm("01234")
+    assert caught.value.translation_key == "command_unconfirmed"
+    assert not coordinator.last_update_success
 
 
 async def test_bad_credentials_start_reauthentication(hass):
@@ -139,6 +241,22 @@ async def test_real_entry_setup_states_options_and_unload(hass):
         assert len(openings) == 1
         assert openings[0].state == "on"
         assert "Finestra cucina" in openings[0].name
+        assert alarms[0].attributes["code_format"] == "number"
+        await hass.services.async_call(
+            "alarm_control_panel",
+            "alarm_arm_away",
+            {"entity_id": alarms[0].entity_id, "code": "01234"},
+            blocking=True,
+        )
+        client.async_set_sector_mode.assert_awaited_once_with("1", 0)
+        client.async_set_sector_mode.reset_mock()
+        await hass.services.async_call(
+            "alarm_control_panel",
+            "alarm_disarm",
+            {"entity_id": alarms[0].entity_id, "code": "01234"},
+            blocking=True,
+        )
+        client.async_set_sector_mode.assert_awaited_once_with("1", 4)
         coordinator = entry.runtime_data
         coordinator.async_set_updated_data(snapshot(0))
         await hass.async_block_till_done()
@@ -149,5 +267,9 @@ async def test_real_entry_setup_states_options_and_unload(hass):
         options = await hass.config_entries.options.async_init(entry.entry_id)
         assert options["type"] is FlowResultType.FORM
         assert options["step_id"] == "init"
+        duplicate = {**DEFAULT_MODE_MAP, "scan_interval": 60, "mode_on": "armed_home"}
+        result = await hass.config_entries.options.async_configure(options["flow_id"], duplicate)
+        assert result["type"] is FlowResultType.FORM
+        assert result["errors"] == {"base": "duplicate_modes"}
         assert await hass.config_entries.async_unload(entry.entry_id)
         client.async_close.assert_awaited_once()

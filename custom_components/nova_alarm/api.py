@@ -1,7 +1,7 @@
 """Async AVS cloud client, reconstructed from the supplied Android APK.
 
-Only authentication, read endpoints and logout are implemented. No arming,
-disarming, zone bypass or device replacement endpoint can be invoked here.
+Commands target a single sector, with the same zone checks as the Android app.
+Zone bypass and device replacement are not implemented.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ ALLOWED_ENDPOINTS = frozenset(
         "/avs/get_sectors",
         "/avs/get_zones",
         "/avs/get_desc",
+        "/avs/set_sectors",
         "/avs/logout",
     }
 )
@@ -52,6 +53,10 @@ class ProtocolError(CannotConnect):
     """The response does not match the reconstructed protocol."""
 
 
+class CommandRejected(AvsError):
+    """A command is not permitted or was refused by the central panel."""
+
+
 @dataclass(frozen=True)
 class Plant:
     id: str
@@ -63,6 +68,7 @@ class Sector:
     id: str
     flags: int | None
     name: str = ""
+    allowed_modes: tuple[int, ...] = ()
 
     @property
     def mode(self) -> int | None:
@@ -157,7 +163,15 @@ def parse_snapshot(sector_xml: ET.Element, zone_xml: ET.Element) -> Snapshot:
         item_id = item.get("id", "")
         if not item_id or item_id in sectors:
             raise ProtocolError("Invalid or duplicate sector identifier")
-        sectors[item_id] = Sector(item_id, optional_int(item.get("type")))
+        sectors[item_id] = Sector(
+            item_id,
+            optional_int(item.get("type")),
+            allowed_modes=tuple(
+                mode
+                for mode, field in enumerate(("on", "ho", "ar", "pe", "off"))
+                if item.get(field) == "1"
+            ),
+        )
     for item in elements(required_element(zone_xml, "GET_ZONES"), "ITEM"):
         item_id = item.get("id", "")
         if not item_id or item_id in zones:
@@ -206,7 +220,7 @@ class AvsClient:
         authenticating: bool = False,
     ) -> ET.Element:
         if endpoint not in ALLOWED_ENDPOINTS:
-            raise ProtocolError("Endpoint is not supported by this read-only client")
+            raise ProtocolError("Endpoint is not supported by this client")
         try:
             async with self._session.post(
                 (server or self._server) + endpoint,
@@ -341,18 +355,48 @@ class AvsClient:
 
     async def async_snapshot(self) -> Snapshot:
         async with self._lock:
-            if not self._token:
-                await self._login()
+            return await self._snapshot_with_renewal()
+
+    async def _snapshot_with_renewal(self) -> Snapshot:
+        """Read under the caller's lock; only reads may be retried automatically."""
+        if not self._token:
+            await self._login()
+        try:
+            return await self._snapshot()
+        except SessionExpired:
+            self._auth = self._token = ""
+            await self._login()
             try:
                 return await self._snapshot()
             except SessionExpired:
                 self._auth = self._token = ""
-                await self._login()
-                try:
-                    return await self._snapshot()
-                except SessionExpired:
-                    self._auth = self._token = ""
-                    raise CannotConnect("Session was rejected after renewal") from None
+                raise CannotConnect("Session was rejected after renewal") from None
+
+    async def async_set_sector_mode(self, sector_id: str, mode: int) -> None:
+        """Send one checked command, never automatically replay a write."""
+        if not re.fullmatch(r"[0-9]+", sector_id) or int(sector_id) == 0:
+            raise CommandRejected("A single nonzero sector is required")
+        if type(mode) is not int or mode not in range(5):
+            raise CommandRejected("Unsupported AVS mode")
+        async with self._lock:
+            snapshot = await self._snapshot_with_renewal()
+            sector = snapshot.sectors.get(sector_id)
+            if sector is None or mode not in sector.allowed_modes:
+                raise CommandRejected("This mode is not permitted for the sector")
+            try:
+                root = await self._read(
+                    "/avs/set_sectors",
+                    {"sectors": f"{sector_id},{mode}", "check": "1", "checkzone": "1"},
+                )
+            except SessionExpired:
+                self._auth = self._token = ""
+                raise CannotConnect(
+                    "Command session expired; refresh before trying again"
+                ) from None
+            result = required_element(root, "SET_SECTORS")
+            if result.get("status") != "0":
+                # Never expose errstr, bypass checks or retry with checkzone=0.
+                raise CommandRejected("Panel refused the command; check zones in the official app")
 
     async def async_close(self) -> None:
         async with self._lock:

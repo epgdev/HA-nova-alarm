@@ -205,12 +205,17 @@ class AvsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 class AvsOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(self, user_input: dict | None = None):
+        errors = {}
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            modes = [user_input[key] for key in DEFAULT_MODE_MAP]
+            if len(set(modes)) == len(modes):
+                return self.async_create_entry(title="", data=user_input)
+            errors["base"] = "duplicate_modes"
+        current = user_input if user_input is not None else self.config_entry.options
         fields = {
             vol.Required(
                 CONF_SCAN_INTERVAL,
-                default=self.config_entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+                default=current.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
             ): vol.All(vol.Coerce(int), vol.Range(min=MIN_SCAN_INTERVAL, max=MAX_SCAN_INTERVAL)),
         }
         states = [
@@ -221,7 +226,7 @@ class AvsOptionsFlow(config_entries.OptionsFlow):
             "armed_vacation",
         ]
         for key, default in DEFAULT_MODE_MAP.items():
-            fields[vol.Required(key, default=self.config_entry.options.get(key, default))] = (
-                SelectSelector(SelectSelectorConfig(options=states, translation_key="alarm_mode"))
+            fields[vol.Required(key, default=current.get(key, default))] = SelectSelector(
+                SelectSelectorConfig(options=states, translation_key="alarm_mode")
             )
-        return self.async_show_form(step_id="init", data_schema=vol.Schema(fields))
+        return self.async_show_form(step_id="init", data_schema=vol.Schema(fields), errors=errors)

@@ -5,10 +5,18 @@ from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryError
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryError, HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import AccountError, AvsClient, CannotConnect, InvalidAuth, Snapshot
+from .api import (
+    AccountError,
+    AvsClient,
+    AvsError,
+    CannotConnect,
+    CommandRejected,
+    InvalidAuth,
+    Snapshot,
+)
 from .const import CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL, DOMAIN
 
 LOGGER = logging.getLogger(__name__)
@@ -27,6 +35,21 @@ class AvsCoordinator(DataUpdateCoordinator[Snapshot]):
             always_update=False,
         )
         self.client = client
+
+    async def async_set_sector_mode(self, sector_id: str, mode: int) -> None:
+        try:
+            await self.client.async_set_sector_mode(sector_id, mode)
+        except AvsError as error:
+            # A failed response may follow an applied command. Reconcile with a read,
+            # without replaying the write or publishing an optimistic alarm state.
+            await self.async_request_refresh()
+            key = "command_rejected" if isinstance(error, CommandRejected) else "command_failed"
+            raise HomeAssistantError(translation_domain=DOMAIN, translation_key=key) from None
+        await self.async_request_refresh()
+        if not self.last_update_success:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN, translation_key="command_unconfirmed"
+            )
 
     async def _async_update_data(self) -> Snapshot:
         try:

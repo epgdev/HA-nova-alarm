@@ -1,4 +1,4 @@
-# Note di protocollo — versione 0.1.0
+# Note di protocollo — versione 0.2.0
 
 Ricostruzione statica dall'APK Mio Antifurto fornito dall'utente, con prima
 verifica effettiva dell'accesso e delle letture tramite lo script Python.
@@ -65,3 +65,35 @@ dispositivi/abbonamento sono segnalati, senza tentativi di sostituzione.
 - Non ricostruiti: stato sirena attiva e temporizzazioni. Il bit memoria allarme
   non rappresenta da solo lo stato `triggered`.
 
+
+## Comandi del settore (0.2.0)
+
+Analisi statica dell’APK Mio Antifurto fornito per questa implementazione:
+`SetSectorsJob.run`, `XMLSetSectorsParser.Handler.startElement`,
+`plantSectors.changeStatus` e `XMLGetSectorsParser.Handler.startElement`.
+Non vengono inclusi nel repository APK o sorgenti decompilati.
+
+`POST /avs/set_sectors` invia `auth`, `session`, `sectors=<id>,<modo>`,
+`check=1`, `checkzone=1`. Le modalità del comando singolo sono 0=ON, 1=HO,
+2=AR, 3=PE, 4=OFF. L’app invia la stessa coppia settore/modalità anche per OFF.
+Il PIN autentica la sessione in `auth_ex`; non è un parametro di `set_sectors`.
+In Home Assistant viene inoltre richiesto e confrontato localmente con il PIN
+configurato, senza convertirlo in numero.
+
+I campi `on`, `ho`, `ar`, `pe`, `off` di `GET_SECTORS/ITEM` sono permessi:
+l’app offre il relativo comando quando il campo è esattamente 1.
+Il client rilegge stato e permessi sotto lo stesso lock della scrittura,
+quindi invia un solo comando per un settore noto con ID numerico non zero.
+Il settore aggregato 0 e le altre azioni numeriche dell’app non sono implementati.
+
+La risposta deve contenere un unico `SET_SECTORS status="0"`.
+L’app tratta status 1, 2 e 3 come rifiuti e usa anche `idzone` e `errstr`
+(per esempio `no_zones`) per spiegare il blocco. Il client non espone il testo
+remoto e rifiuta anche status mancanti, -1 o sconosciuti. Non implementa
+la conferma dell’app che reinvia con `checkzone=0`.
+
+Solo le letture possono rinnovare la sessione e ritentare automaticamente.
+Le scritture non vengono ripetute dopo errori, sessione scaduta o timeout.
+Home Assistant rilegge lo stato anche dopo un errore del comando; non pubblica
+uno stato di inserimento o disinserimento basato sulla sola richiesta.
+Queste richieste sono verificate con test simulati, non ancora sul campo.
