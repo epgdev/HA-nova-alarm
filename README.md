@@ -1,4 +1,4 @@
-# Nova Alarm per Home Assistant — 0.4.0
+# Nova Alarm per Home Assistant — 0.4.1
 
 Prima versione sperimentale di una **custom integration** per il cloud AVS.
 Si configura da Impostazioni → Dispositivi e servizi. Non è un add-on da
@@ -348,3 +348,13 @@ Un logout fallito viene segnalato nei registri come `AVS logout unconfirmed`:
 la cancellazione dei token locali non garantisce la chiusura sul server.
 La convivenza effettiva con l’app resta da verificare sull’impianto; lo sviluppo
 ha usato esclusivamente risposte simulate e non ha inviato comandi reali.
+
+### Risposte non XML durante l’accesso (0.4.1)
+
+Se compare `operation=/avs/auth_ex reason=invalid_xml`, l’accesso al portale
+può essere riuscito ma la risposta successiva non è XML valido. La 0.4.1
+aggiunge la riga `AVS invalid XML response` con stato HTTP, numero di byte
+e classificazione fissa (`empty`, `html`, `json_like`, `xml_like`, `other`).
+Non registra il corpo, intestazioni o credenziali. È diagnostica aggiuntiva,
+non una correzione dell’accesso degli invitati: la causa richiede confronto
+con l’accesso nell’app ufficiale usando lo stesso account e PIN.

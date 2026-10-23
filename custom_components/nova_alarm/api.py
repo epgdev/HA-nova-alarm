@@ -294,7 +294,29 @@ class AvsClient:
                     chunks.extend(chunk)
                     if len(chunks) > MAX_RESPONSE:
                         raise ProtocolError("Response exceeds size limit")
-                root = parse_xml(bytes(chunks), authenticating=authenticating)
+                try:
+                    root = parse_xml(bytes(chunks), authenticating=authenticating)
+                except ProtocolError as error:
+                    if error.reason == "invalid_xml":
+                        # Only fixed classifications and numeric sizes, never server
+                        # content, headers, credentials, tokens or parser messages.
+                        head = bytes(chunks[:256]).lstrip(b"\xef\xbb\xbf \t\r\n").lower()
+                        kind = "empty" if not chunks else "other"
+                        if head.startswith((b"<!doctype html", b"<html")):
+                            kind = "html"
+                        elif head.startswith((b"<?xml", b"<avs")):
+                            kind = "xml_like"
+                        elif head.startswith((b"{", b"[")):
+                            kind = "json_like"
+                        LOGGER.warning(
+                            "AVS invalid XML response: operation=%s http_status=%d "
+                            "response_bytes=%d response_kind=%s",
+                            endpoint,
+                            response.status,
+                            len(chunks),
+                            kind,
+                        )
+                    raise
                 if response.status != 200:
                     raise ProtocolError("Unexpected AVS HTTP response")
                 return root

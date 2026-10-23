@@ -477,3 +477,34 @@ def test_only_single_valid_command_pair_retains_literal_comma(field, value):
     body = encode_form({field: value})
     assert b"," not in body
     assert parse_qs(body.decode()) == {field: [value]}
+
+
+@pytest.mark.parametrize(
+    "body,kind",
+    [
+        (b"", "empty"),
+        (b"<html>secret-password", "html"),
+        (b'{"password":"secret-password"}', "json_like"),
+        (b'<AVS secret="secret-password">', "xml_like"),
+        (b"secret-password", "other"),
+    ],
+)
+async def test_invalid_xml_response_metadata_without_content(body, kind, caplog):
+    client = make_client()
+    response = MagicMock()
+    response.status = 200
+
+    async def chunks(size):
+        yield body
+
+    response.content.iter_chunked = chunks
+    context = MagicMock()
+    context.__aenter__ = AsyncMock(return_value=response)
+    client._session.post.return_value = context
+    with pytest.raises(ProtocolError) as caught:
+        await client._post("/avs/auth_ex", {"password": "secret-password"}, authenticating=True)
+    assert caught.value.reason == "invalid_xml"
+    assert f"response_kind={kind}" in caplog.text
+    assert f"response_bytes={len(body)}" in caplog.text
+    assert "http_status=200" in caplog.text
+    assert "secret-password" not in caplog.text
