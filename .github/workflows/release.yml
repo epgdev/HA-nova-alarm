@@ -1,0 +1,94 @@
+name: Publish release
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+    paths:
+      - .github/workflows/release.yml
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to publish
+        required: true
+        default: v0.4.1
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-release
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event.inputs.tag || (github.ref_type == 'tag' && github.ref_name) || 'v0.4.1' }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate version tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          cache: pip
+      - name: Verify version and integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - "$RELEASE_TAG" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          manifest = json.loads(Path('custom_components/nova_alarm/manifest.json').read_text())
+          assert manifest['version'] == sys.argv[1].removeprefix('v'), 'Tag and manifest version differ'
+          PY
+          python -m pip install -r requirements-dev.txt
+          python -m pytest -q
+          ruff check .
+          ruff format --check .
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --json tagName >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists; leaving it unchanged."
+            exit 0
+          fi
+          if [[ "$RELEASE_TAG" == 'v0.4.1' ]]; then
+            cat > "$RUNNER_TEMP/release-notes.md" <<'NOTES'
+          ## Nova Alarm 0.4.1
+
+          - Inserimento e disinserimento con richiesta del PIN configurabile.
+          - Selezione delle modalità di inserimento visibili.
+          - Interruttori per escludere e reincludere le zone.
+          - Sessioni AVS brevi per default e aggiornamenti automatici disattivabili.
+          - Icona locale e diagnostica senza credenziali o contenuto delle risposte.
+
+          ### Aggiornamento
+
+          Aggiorna Nova Alarm da HACS e riavvia Home Assistant. La configurazione esistente viene conservata.
+          Lascia disattivato "Mantieni la sessione AVS aperta" per liberare la sessione dopo le operazioni.
+          Per nuovi account, inclusi gli invitati, accedi prima dall'app ufficiale Mio Antifurto e accetta i termini richiesti.
+
+          L'aggiornamento non invia comandi all'impianto.
+          NOTES
+            gh release create "$RELEASE_TAG" --verify-tag --latest \
+              --title "Nova Alarm ${RELEASE_TAG#v}" \
+              --notes-file "$RUNNER_TEMP/release-notes.md"
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --latest \
+              --title "Nova Alarm ${RELEASE_TAG#v}" --generate-notes
+          fi
