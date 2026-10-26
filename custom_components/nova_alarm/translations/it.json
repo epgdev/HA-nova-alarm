@@ -49,7 +49,12 @@
       "timeout": "Il cloud AVS non ha risposto entro il tempo previsto. Consulta i registri Nova Alarm.",
       "tls_error": "La connessione HTTPS ad AVS non è verificabile. Controlla data, ora e connessione di Home Assistant; non disabilitare la verifica dei certificati.",
       "panel_unreachable": "Il cloud AVS segnala che la centrale non è raggiungibile o non è stata trovata. Consulta i registri Nova Alarm.",
-      "session_error": "La sessione AVS è stata rifiutata anche dopo il rinnovo. Consulta i registri Nova Alarm."
+      "session_error": "La sessione AVS è stata rifiutata anche dopo il rinnovo. Consulta i registri Nova Alarm.",
+      "user_already_connected": "L’utente della centrale risulta già connesso. Chiudi l’altra sessione o attendi che venga rilasciata.",
+      "panel_access_inhibited": "La centrale ha temporaneamente inibito gli accessi. Attendi prima di riprovare.",
+      "panel_programming": "La centrale è in programmazione e non accetta accessi.",
+      "panel_busy": "La centrale è occupata e non accetta nuovi accessi. Attendi prima di riprovare.",
+      "logout_pending": "La chiusura della precedente sessione AVS non è confermata. L’integrazione ne ritenterà il logout prima di aprire una nuova sessione."
     },
     "abort": {
       "already_configured": "Questo impianto è già configurato.",
@@ -152,7 +157,7 @@
       "message": "Invio del comando non confermato. Controlla lo stato nell’app ufficiale prima di riprovare. Il comando non è stato ritentato automaticamente. Consulta i registri Nova Alarm per la causa diagnostica."
     },
     "command_unconfirmed": {
-      "message": "Comando accettato, ma lo stato richiesto non è ancora confermato dalla centrale. Attendi l’aggiornamento e controlla nell’app ufficiale prima di riprovare."
+      "message": "La centrale non ha confermato lo stato richiesto entro le riletture previste. Il comando può comunque essere stato eseguito o essere ancora in corso. Controlla lo stato nell’app ufficiale prima di riprovare."
     },
     "zone_not_editable": {
       "message": "La zona è attiva o il suo stato non è disponibile. Modifica le esclusioni a impianto disinserito."

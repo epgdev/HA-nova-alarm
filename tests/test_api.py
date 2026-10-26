@@ -88,7 +88,7 @@ async def test_success_metadata_cache_and_logout():
         "/avs/felist": xml(
             '<AVS><SERVER hostname="attacker.test"/><SERVER hostname="fe2.myavsalarm.com"/></AVS>'
         ),
-        "/avs/auth_ex": xml('<AVS><AUTH_EX auth="a"/><LOGIN session="s"/></AVS>'),
+        "/avs/auth_ex": xml('<AVS><AUTH_EX auth="a"/><LOGIN status="0" session="s"/></AVS>'),
         "/avs/get_sectors": xml(
             '<AVS><GET_SECTORS><ITEM id="1" type="16777236"/></GET_SECTORS></AVS>'
         ),

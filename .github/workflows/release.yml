@@ -4,16 +4,12 @@ on:
   push:
     tags:
       - 'v*'
-    branches:
-      - main
-    paths:
-      - .github/workflows/release.yml
   workflow_dispatch:
     inputs:
       tag:
         description: Existing version tag to publish
         required: true
-        default: v0.4.1
+        default: v0.5.0
 
 permissions:
   contents: write
@@ -23,7 +19,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  RELEASE_TAG: ${{ github.event.inputs.tag || (github.ref_type == 'tag' && github.ref_name) || 'v0.4.1' }}
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
 
 jobs:
   release:
@@ -67,7 +63,11 @@ jobs:
             echo "Release $RELEASE_TAG already exists; leaving it unchanged."
             exit 0
           fi
-          if [[ "$RELEASE_TAG" == 'v0.4.1' ]]; then
+          if [[ -f ".github/release-notes/$RELEASE_TAG.md" ]]; then
+            gh release create "$RELEASE_TAG" --verify-tag --latest \
+              --title "Nova Alarm ${RELEASE_TAG#v}" \
+              --notes-file ".github/release-notes/$RELEASE_TAG.md"
+          elif [[ "$RELEASE_TAG" == 'v0.4.1' ]]; then
             cat > "$RUNNER_TEMP/release-notes.md" <<'NOTES'
           ## Nova Alarm 0.4.1
 

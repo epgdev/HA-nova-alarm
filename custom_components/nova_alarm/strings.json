@@ -49,7 +49,12 @@
       "timeout": "The AVS cloud did not respond in time. Check the Nova Alarm logs.",
       "tls_error": "The HTTPS connection to AVS could not be verified. Check Home Assistant date, time and connectivity; do not disable certificate verification.",
       "panel_unreachable": "The AVS cloud reports that the panel is unreachable or was not found. Check the Nova Alarm logs.",
-      "session_error": "AVS rejected the session even after renewal. Check the Nova Alarm logs."
+      "session_error": "AVS rejected the session even after renewal. Check the Nova Alarm logs.",
+      "user_already_connected": "The panel user is already connected. Close the other session or wait for it to be released.",
+      "panel_access_inhibited": "The panel has temporarily inhibited access. Wait before retrying.",
+      "panel_programming": "The panel is in programming mode and cannot accept logins.",
+      "panel_busy": "The panel is busy and cannot accept new logins. Wait before retrying.",
+      "logout_pending": "Closing the previous AVS session is unconfirmed. The integration will retry logout before opening a new session."
     },
     "abort": {
       "already_configured": "This installation is already configured.",
@@ -152,7 +157,7 @@
       "message": "Command delivery is unconfirmed. Check the state in the official app before retrying. The command was not automatically retried. Check the Nova Alarm logs for the diagnostic cause."
     },
     "command_unconfirmed": {
-      "message": "Command accepted, but the requested state is not yet confirmed by the panel. Wait for an update and check the official app before retrying."
+      "message": "The panel did not confirm the requested state within the confirmation checks. The command may still have executed or be in progress. Check the official app before retrying."
     },
     "zone_not_editable": {
       "message": "The zone is active or its state is unavailable. Change exclusions while the system is disarmed."

@@ -15,7 +15,7 @@ from custom_components.nova_alarm.switch import AvsZoneExclusion
 
 async def test_only_on_is_shown_and_other_services_blocked(hass):
     client = AsyncMock()
-    client.async_snapshot.return_value = snapshot()
+    client.async_snapshot.return_value = snapshot(mode=0)
     entry = make_entry({"enabled_modes": ["ON"]})
     coordinator = AvsCoordinator(hass, entry, client)
     coordinator.async_set_updated_data(snapshot())
@@ -32,6 +32,7 @@ async def test_only_on_is_shown_and_other_services_blocked(hass):
     client.async_set_sector_mode.assert_not_awaited()
     await alarm.async_alarm_arm_away("01234")
     client.async_set_sector_mode.assert_awaited_once_with("1", 0)
+    client.async_snapshot.return_value = snapshot()
     await alarm.async_alarm_disarm("01234")
     assert client.async_set_sector_mode.call_args.args == ("1", 4)
 

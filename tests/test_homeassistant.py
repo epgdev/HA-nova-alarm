@@ -55,9 +55,9 @@ def make_entry(options=None):
     )
 
 
-def snapshot(flags=1):
+def snapshot(flags=1, *, mode=4):
     return Snapshot(
-        {"1": Sector("1", 16777236, "Casa", (0, 1, 2, 3, 4))},
+        {"1": Sector("1", 16777232 | mode, "Casa", (0, 1, 2, 3, 4))},
         {"1": Zone("1", flags, "Finestra cucina")},
     )
 
@@ -101,7 +101,7 @@ async def test_commands_require_exact_pin(hass, code):
 )
 async def test_commands_refresh_actual_state(hass, method, mode):
     client = AsyncMock()
-    client.async_snapshot.return_value = snapshot()
+    client.async_snapshot.return_value = snapshot(mode=mode)
     coordinator = AvsCoordinator(hass, make_entry(), client)
     coordinator.async_set_updated_data(snapshot())
     alarm = AvsAlarm(coordinator, "1")
@@ -110,14 +110,13 @@ async def test_commands_refresh_actual_state(hass, method, mode):
     await getattr(alarm, method)("01234")
     client.async_set_sector_mode.assert_awaited_once_with("1", mode)
     client.async_snapshot.assert_awaited_once()
-    # Even if the panel takes time to arm, publish only the observed state.
-    assert alarm.alarm_state == AlarmControlPanelState.DISARMED
+    assert coordinator.data.sectors["1"].mode == mode
 
 
 async def test_mapping_and_ambiguous_legacy_options(hass):
     entry = make_entry({"mode_on": "armed_vacation"})
     client = AsyncMock()
-    client.async_snapshot.return_value = snapshot()
+    client.async_snapshot.return_value = snapshot(mode=0)
     coordinator = AvsCoordinator(hass, entry, client)
     coordinator.async_set_updated_data(snapshot())
     alarm = AvsAlarm(coordinator, "1")
@@ -225,6 +224,12 @@ async def test_flow_through_manager(hass, require_pin):
 async def test_real_entry_setup_states_options_and_unload(hass):
     client = AsyncMock()
     client.async_snapshot.return_value = snapshot()
+
+    async def apply_sector_command(sector_id, mode):
+        client.async_snapshot.return_value = snapshot(mode=mode)
+
+    client.async_set_sector_mode.side_effect = apply_sector_command
+
     with (
         patch("custom_components.nova_alarm.AvsClient", return_value=client),
         patch("custom_components.nova_alarm.async_get_clientsession", return_value=MagicMock()),
@@ -387,7 +392,7 @@ async def test_command_log_never_includes_error_message(hass, caplog):
 )
 async def test_optional_command_pin_and_reenable(hass, method, mode):
     client = AsyncMock()
-    client.async_snapshot.return_value = snapshot()
+    client.async_snapshot.return_value = snapshot(mode=mode)
     coordinator = AvsCoordinator(hass, make_entry({"require_command_pin": False}), client)
     coordinator.async_set_updated_data(snapshot())
     alarm = AvsAlarm(coordinator, "1")
@@ -403,3 +408,19 @@ async def test_optional_command_pin_and_reenable(hass, method, mode):
     assert client.async_set_sector_mode.await_count == 1
     await getattr(alarm, method)("01234")
     assert client.async_set_sector_mode.await_count == 2
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "user_already_connected",
+        "panel_access_inhibited",
+        "panel_programming",
+        "panel_busy",
+        "logout_pending",
+    ],
+)
+def test_login_and_cleanup_errors_have_specific_setup_messages(reason):
+    from custom_components.nova_alarm.config_flow import error_key
+
+    assert error_key(CannotConnect("unavailable", reason=reason)) == reason

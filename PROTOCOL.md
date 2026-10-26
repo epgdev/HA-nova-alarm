@@ -1,4 +1,4 @@
-# Note di protocollo — versione 0.4.0
+# Note di protocollo — versione 0.5.0
 
 Ricostruzione statica dall'APK Mio Antifurto fornito dall'utente, con prima
 verifica effettiva dell'accesso e delle letture tramite lo script Python.
@@ -143,3 +143,33 @@ esplicitamente il riuso precedente; `automatic_updates=false` disabilita il
 polling coordinato, non gli aggiornamenti iniziali/manuali/dopo comando.
 La risposta `TOO-MANY-USERS` resta un errore da rispettare, senza tentativi di
 forzatura; la reale politica di concorrenza del server non è stata verificata.
+
+## Validazione e recupero (0.5.0)
+
+`LOGIN.status` di `auth_ex` è obbligatorio: 0 autorizza l’adozione dei token;
+2 indica PIN rifiutato; 4 utente già connesso; 5 troppi utenti; 7 accesso
+inibito; 100 programmazione; 101 centrale occupata. Stato assente o non noto
+produce un errore di protocollo. Le associazioni derivano da
+`main_activity.AuthExHandler` e dalle stringhe dell’APK. I token di un login
+rifiutato non vengono memorizzati e non vengono usati per letture o logout.
+
+La discovery fallita o senza hostname ammessi non viene più considerata
+completata. Viene ritentata dopo almeno 60 secondi; un errore di trasporto o
+HTTP 500/502/503/504 sull’endpoint operativo invalida la cache della discovery
+per un’operazione successiva. Nessuna richiesta di scrittura viene ripetuta.
+
+Un logout senza conferma mantiene le credenziali della sola sessione posseduta
+in memoria e imposta uno stato di rilascio pendente. L’operazione successiva
+ritenta il logout prima di consentire un nuovo login, anche in modalità
+persistente. `SESSION_EXPIRED` equivale a sessione già rilasciata; altrimenti
+serve un elemento `LOGOUT` nella risposta. Errori e annullamenti non cancellano
+le credenziali necessarie al recupero, né mascherano l’errore della scrittura.
+
+Il coordinatore serializza ogni comando e la relativa conferma. L’operazione
+ritorna successo solo quando le letture confermano la modalità del settore
+o il bit di esclusione richiesti: al massimo tre letture, intervallate da due
+secondi, con timeout di conferma di 20 secondi (l’eventuale cleanup della
+sessione può richiedere tempo aggiuntivo). Un errore di lettura interrompe la
+conferma. Lo stato pubblicato resta quello osservato, senza aggiornamenti
+ottimistici. L’azione non confermata può essere già stata eseguita: non viene
+reinvocata automaticamente.

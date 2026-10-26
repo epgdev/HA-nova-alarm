@@ -107,7 +107,16 @@ modifica la programmazione della centrale.
 
 I pulsanti sono limitati anche dai permessi restituiti da AVS. L’integrazione
 non forza l’inserimento in presenza di un rifiuto e non esclude zone
-automaticamente. Dopo ogni comando rilegge lo stato dalla centrale.
+automaticamente. Dopo ogni comando rilegge lo stato dalla centrale: l’azione
+termina con successo solo quando viene confermata la modalità o l’esclusione
+richiesta. Se lo stato tarda a cambiare, effettua fino a tre letture con brevi
+attese, senza inviare nuovamente il comando. La conferma ha un timeout dedicato;
+il rilascio della sessione può richiedere ulteriore tempo.
+
+Se viene segnalato un esito non confermato, il comando può comunque essere
+stato eseguito o essere ancora in corso, per esempio durante un ritardo della
+centrale. Controlla lo stato nell’app ufficiale prima di riprovare. Le azioni
+sull’impianto vengono elaborate una alla volta, compresa la verifica dello stato.
 
 ### Richiesta del PIN
 
@@ -185,8 +194,16 @@ aggiorna, ricarica la pagina del browser o dell’app.
   termini richiesti e verifica l’accesso all’impianto con il PIN.
 - **Utente già connesso o troppe connessioni:** controlla le altre sessioni e
   le opzioni descritte in **Aggiornamenti e uso insieme all’app ufficiale**.
-  I dispositivi registrati nel portale non corrispondono necessariamente a
-  sessioni attive. Gestisci registrazioni e limiti dall’app o dal portale AVS.
+  L’integrazione distingue l’utente della centrale già connesso dal limite
+  complessivo di utenti. I dispositivi registrati nel portale non corrispondono
+  necessariamente a sessioni attive. Gestisci registrazioni e limiti dall’app o dal portale AVS.
+- **Logout non confermato:** l’integrazione conserva in memoria i dati della
+  propria sessione e ritenta la chiusura prima di un nuovo accesso. Se il logout
+  continua a fallire, blocca nuove connessioni e può rendere le entità
+  indisponibili; attendi il ripristino del servizio e controlla i registri.
+- **Server AVS non raggiungibile:** l’integrazione ritenta la ricerca del server
+  dopo un errore, con una pausa fra i tentativi. Non occorre ricreare
+  l’integrazione per un errore temporaneo della discovery.
 - **Pulsanti di inserimento mancanti:** controlla le modalità visibili e i
   permessi dell’utente nell’app ufficiale.
 - **Comando non confermato:** verifica lo stato nell’app ufficiale prima di

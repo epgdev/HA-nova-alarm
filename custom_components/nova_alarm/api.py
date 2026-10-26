@@ -12,11 +12,13 @@ import re
 import xml.etree.ElementTree as ET
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, replace
+from time import monotonic
 from urllib.parse import quote_plus, unquote_plus, urlencode
 
 import aiohttp
 
 MAX_RESPONSE = 2 * 1024 * 1024
+DISCOVERY_RETRY_SECONDS = 60
 LOGGER = logging.getLogger(__name__)
 ALLOWED_ENDPOINTS = frozenset(
     {
@@ -236,8 +238,10 @@ class AvsClient:
         self._keep_session = keep_session
         self._server = "https://fe1.myavsalarm.com:443"
         self._discovered = False
+        self._next_discovery_at = 0.0
         self._auth = ""
         self._token = ""
+        self._logout_pending = False
         self._lock = asyncio.Lock()
         self._names: dict[tuple[str, str], str] = {}
 
@@ -259,6 +263,12 @@ class AvsClient:
         except AvsError as error:
             # Record only the allowlisted endpoint, never URLs, bodies or form fields.
             error.operation = endpoint if endpoint in ALLOWED_ENDPOINTS else "unsupported_endpoint"
+            if endpoint != "/avs/felist" and (
+                error.reason in {"timeout", "connection_error", "transport_error"}
+                or error.reason in {"http_500", "http_502", "http_503", "http_504"}
+            ):
+                # Refresh discovery on a later operation, never replay this request.
+                self._discovered = False
             raise
 
     async def _post_request(
@@ -330,22 +340,24 @@ class AvsClient:
             raise CannotConnect("Connection to AVS failed", reason="transport_error") from None
 
     async def _discover(self) -> None:
-        if self._discovered:
+        if self._discovered or monotonic() < self._next_discovery_at:
             return
+        self._next_discovery_at = monotonic() + DISCOVERY_RETRY_SECONDS
         try:
             root = await self._post(
                 "/avs/felist", self._common(), server="https://dr.myavsalarm.com:443"
             )
             hosts = [e.get("hostname", "") for e in elements(root, "SERVER")]
             hosts = [h for h in hosts if re.fullmatch(r"fe\d+\.myavsalarm\.com", h)]
-            if hosts:
-                self._server = "https://" + hosts[0] + ":443"
+            if not hosts:
+                raise ProtocolError("No trusted AVS discovery hosts", reason="invalid_discovery")
+            self._server = "https://" + hosts[0] + ":443"
         except AvsError:
-            pass  # APK fallback: fe1. Never send secrets to arbitrary hosts.
+            return  # Keep the current/fallback host; retry discovery after cooldown.
         self._discovered = True
 
     async def async_list_plants(self) -> list[Plant]:
-        async with self._lock:
+        async with self._operation():
             await self._discover()
             root = await self._post(
                 "/avs/portal_auth",
@@ -367,6 +379,12 @@ class AvsClient:
             return plants
 
     async def _login(self) -> None:
+        if self._logout_pending:
+            raise CannotConnect(
+                "Previous AVS logout is unconfirmed",
+                reason="logout_pending",
+                operation="/avs/logout",
+            )
         if self.plant is None:
             raise ProtocolError("No plant selected")
         await self._discover()
@@ -386,8 +404,31 @@ class AvsClient:
             },
             authenticating=True,
         )
+        login = required_element(root, "LOGIN", operation="/avs/auth_ex")
+        status = login.get("status")
+        # A rejected LOGIN can still include auth/session fields. Do not adopt or
+        # close those tokens: they are not evidence of a session owned by us.
+        if status == "2":
+            raise InvalidAuth("Panel PIN refused", reason="invalid_pin", operation="/avs/auth_ex")
+        rejected = {
+            "4": "user_already_connected",
+            "5": "TOO-MANY-USERS",
+            "7": "panel_access_inhibited",
+            "100": "panel_programming",
+            "101": "panel_busy",
+        }
+        if status in rejected:
+            raise CannotConnect(
+                "AVS panel login unavailable", reason=rejected[status], operation="/avs/auth_ex"
+            )
+        if status != "0":
+            raise ProtocolError(
+                "Unrecognized AVS login status",
+                reason="invalid_login_status",
+                operation="/avs/auth_ex",
+            )
         auth = required_element(root, "AUTH_EX", operation="/avs/auth_ex").get("auth", "")
-        token = required_element(root, "LOGIN", operation="/avs/auth_ex").get("session", "")
+        token = login.get("session", "")
         if not auth or not token:
             raise ProtocolError(
                 "Missing session credentials",
@@ -445,10 +486,16 @@ class AvsClient:
     async def _operation(self):
         """Serialize the whole operation, including release of its AVS session."""
         async with self._lock:
+            if self._logout_pending and not await self._logout():
+                raise CannotConnect(
+                    "Previous AVS logout is unconfirmed",
+                    reason="logout_pending",
+                    operation="/avs/logout",
+                )
             try:
                 yield
             finally:
-                if not self._keep_session:
+                if not self._keep_session or self._logout_pending:
                     await self._logout()
 
     async def _snapshot_with_renewal(self) -> Snapshot:
@@ -527,12 +574,19 @@ class AvsClient:
         async with self._lock:
             await self._logout()
 
-    async def _logout(self) -> None:
+    async def _logout(self) -> bool:
         """Release our session only; the caller holds the operation lock."""
+        if not self._token:
+            self._auth = ""
+            self._logout_pending = False
+            return True
+        # Retain our credentials on failure/cancellation so the next operation
+        # can retry closing this session before it attempts a fresh login.
+        self._logout_pending = True
         try:
-            if self._token:
-                async with asyncio.timeout(10):
-                    await self._read("/avs/logout")
+            async with asyncio.timeout(10):
+                root = await self._read("/avs/logout")
+                required_element(root, "LOGOUT", operation="/avs/logout")
         except SessionExpired:
             pass  # Already expired; there is no valid session to close.
         except AvsError as error:
@@ -541,7 +595,10 @@ class AvsClient:
                 type(error).__name__,
                 error.reason,
             )
+            return False
         except TimeoutError:
             LOGGER.warning("AVS logout unconfirmed: reason=timeout; server session may persist")
-        finally:
-            self._auth = self._token = ""
+            return False
+        self._auth = self._token = ""
+        self._logout_pending = False
+        return True

@@ -11,7 +11,8 @@ from homeassistant.loader import async_setup as setup_loader
 
 
 @pytest.fixture
-async def hass(tmp_path):
+async def hass(tmp_path, monkeypatch):
+    monkeypatch.setattr("custom_components.nova_alarm.coordinator.CONFIRMATION_DELAY", 0)
     source = Path(__file__).parents[1] / "custom_components"
     shutil.copytree(
         source, tmp_path / "custom_components", ignore=shutil.ignore_patterns("__pycache__")

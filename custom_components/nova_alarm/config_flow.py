@@ -77,6 +77,11 @@ def error_key(error: AvsError) -> str:
         "COMMUNICATION-ERROR": "panel_unreachable",
         "EQUIPMENT-NOT-FOUND": "panel_unreachable",
         "session_rejected_after_renewal": "session_error",
+        "user_already_connected": "user_already_connected",
+        "panel_access_inhibited": "panel_access_inhibited",
+        "panel_programming": "panel_programming",
+        "panel_busy": "panel_busy",
+        "logout_pending": "logout_pending",
     }
     if error.reason in specific:
         return specific[error.reason]

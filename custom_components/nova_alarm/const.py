@@ -2,7 +2,7 @@
 
 DOMAIN = "nova_alarm"
 NAME = "Nova Alarm"
-VERSION = "0.4.1"
+VERSION = "0.5.0"
 CONF_KEEP_SESSION = "keep_session"
 CONF_AUTOMATIC_UPDATES = "automatic_updates"
 CONF_REQUIRE_COMMAND_PIN = "require_command_pin"

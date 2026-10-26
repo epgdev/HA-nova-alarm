@@ -92,7 +92,7 @@ async def test_logout_failure_does_not_mask_read_or_expose_secrets(caplog):
     client._read.side_effect = CannotConnect("secret-password", reason="timeout")
     result = await client.async_snapshot()
     assert result.sectors["1"].mode == 4
-    assert not client._token
+    assert client._token and client._logout_pending
     assert "AVS logout unconfirmed" in caplog.text
     assert "secret-password" not in caplog.text
 
@@ -105,7 +105,7 @@ async def test_logout_failure_does_not_mask_original_command_error():
     assert client._read.call_args_list[0].args[0] == "/avs/set_sectors"
     assert client._read.call_args_list[1].args[0] == "/avs/logout"
     assert client._read.await_count == 2
-    assert not client._token
+    assert client._token and client._logout_pending
 
 
 async def test_cancelled_read_releases_session():
@@ -164,6 +164,7 @@ async def test_manual_mode_still_reads_on_request_and_after_commands(hass):
     client.async_snapshot.return_value = Snapshot({"1": Sector("1", 4)}, {})
     coordinator = AvsCoordinator(hass, make_entry({"automatic_updates": False}), client)
     await coordinator.async_refresh()
+    client.async_snapshot.return_value = Snapshot({"1": Sector("1", 0)}, {})
     await coordinator.async_set_sector_mode("1", 0)
     assert client.async_snapshot.await_count == 2
     client.async_set_sector_mode.assert_awaited_once_with("1", 0)
